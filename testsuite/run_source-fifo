@@ -1,0 +1,116 @@
+#! /bin/bash
+
+exec_valgrind() {
+  valgrind --leak-check=full --tool=memcheck --log-file="$t/dbg-out" -- "$@"
+}
+
+exec_strace() {
+  strace -o "$t/dbg-out" -- "$@"
+}
+
+exec_simple() {
+  "$@"
+}
+
+panic() {
+  printf "$@" >&2
+  echo >&2
+  exit 1
+}
+
+num_failures=0
+failure() {
+  printf "test %s failed\n" "$1" >&2
+  ++num_failures
+}
+
+t=`mktemp -d -t source-fifo.XXXXXX`
+trap "rm -rf $t" EXIT
+
+METHOD=exec_$1
+PROG=$2
+SOCK=$t/sock
+
+run() {
+  rm -f "$t/out" "$t/err" "$SOCK" "$t/dbg-out" "$t/exp"
+
+  $METHOD "$PROG" "$SOCK" "$t/pid" >$t/out &
+
+  local pid=$!
+
+  while test ! -w "$SOCK" && kill -s 0 "$pid" 2>/dev/null; do
+      usleep 10000
+  done
+
+  read pid < $t/pid
+  
+  test -w "$SOCK" || panic "program failed to start"
+
+  run_$1 "$pid" "$SOCK" "$t/out"
+
+  if test -e "$t/dbg-out"; then
+      cat "$t/dbg-out"
+  fi
+}
+
+send_cont() {
+  local sleep=
+  
+  while test -e "$t/pid"; do
+      kill -s CONT -- "$1"
+
+      $sleep
+      sleep='usleep 10000'
+  done
+}
+
+printf_line() {
+  local sock=$1
+
+  printf "$2\\n"     "$3" >> "$sock"
+  printf "IN|$2<\\n" "$3" >> "$t/exp"
+}
+
+send_lines() {
+  local sock=$1
+  local i
+  shift
+
+  for i in "$@"; do
+      printf_line "$sock" "%s" "$i"
+  done
+}
+
+run_1() {
+  local pid=$1
+  local sock=$2
+  local out=$3
+
+  send_lines  "$sock" "a" "b" "c" "d" "xxxxxxxxxxxxxxxxxxxx"
+  printf_line "$sock" "T%3000s" "t"
+  printf_line "$sock" "S%3000s" "s"
+
+  send_cont "$pid"
+
+  wait
+
+  diff -u "$t/out" "$t/exp" || failure "1"
+}
+
+run_2() {
+  local pid=$1
+  local sock=$2
+  local out=$3
+
+  printf_line "$sock" "A%4093s" "a"
+  send_lines  "$sock" "" "" "" "" "" "" "" "" "" "" ""
+
+  send_cont "$pid"
+
+  wait
+
+  diff -u "$t/out" "$t/exp" || failure "2"
+}
+
+run 1
+run 2

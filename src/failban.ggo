@@ -1,0 +1,6 @@
+package "failban"
+version "0.0.1"
+purpose "simple ip ban tool"
+
+option "config" c "configuration file"   string typestr="file"
+option "quiet"  q "quiet"   flag off
