@@ -55,6 +55,8 @@ static void _trigger_free(void *t)
 	char		tmpbuf[INET6_ADDRSTRLEN];
 	struct trigger	*trigger = t;
 
+	BUG_ON(!trigger);
+
 	log_msg(L_ALLOC, DEBUG_CATEGORY, "trigger = " TRIGGER_FMT,
 		TRIGGER_ARG(trigger, tmpbuf));
 

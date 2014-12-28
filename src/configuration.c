@@ -63,7 +63,7 @@ char const *configuration_lookup_placeholder(char const *str, size_t len)
 {
 #define PATTERN_IP4	"([0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3})"
 #define PATTERN_IP6	"([0-9a-fA-F:]*:([0-9a-fA-F:]*)" PATTERN_IP4 "?)"
-	
+
 	if (xstrneq(str, len, "IP4"))
 		return PATTERN_IP4;
 	else if (xstrneq(str, len, "IP6"))
@@ -165,7 +165,9 @@ bool configuration_get_rate(uint64_t *res, dictionary *dict,
 		goto out;
 	}
 
-	while (err && isspace(*err))
+	BUG_ON(!err);
+
+	while (isspace(*err))
 		++err;
 
 	switch (*err) {
@@ -218,9 +220,12 @@ out:
 bool _initfn configuration_read(struct gengetopt_args_info const *args,
 				struct environment *env)
 {
-	dictionary	*d = iniparser_load(args->config_arg);
+	dictionary	*d;
 	bool		res = false;
 
+	ltraceA("args=%p, env=%p", args, env);
+
+	d = iniparser_load(args->config_arg);
 	if (!d) {
 		lerr("failed to open configuration file '%s'",
 		     args->config_arg);
@@ -228,7 +233,9 @@ bool _initfn configuration_read(struct gengetopt_args_info const *args,
 	}
 
 	if (!configuration_parse_sources(d, &env->sources) ||
-	    !configuration_parse_rules(d, &env->rules))
+	    !configuration_parse_rules(d, &env->rules) ||
+	    !configuration_parse_filter(d, env) ||
+	    !configuration_parse_whitelist(d, &env->whitelist, &env->num_whitelist))
 		goto out;
 
 
@@ -239,5 +246,8 @@ out:
 	endgrent();
 
 	iniparser_freedict(d);
+
+	ltraceD("--> %d", res);
+
 	return res;
 }

@@ -30,12 +30,14 @@ struct source {
 	int			fd;
 
 	bool			(*open)(struct source *);
-	bool			(*reopen)(struct source *);
+	bool			(*reopen)(struct source *, bool full_caps);
 	bool			(*read)(struct source *);
 	bool			(*has_line)(struct source const *);
 	void			(*get_line)(struct source *, struct strbuf *line);
 	void			(*free)(struct source *);
 	bool			(*flush)(struct source *);
+
+	ssize_t			(*read_ll)(struct source *, void *dst, size_t count);
 };
 
 struct source_fifo_params {
@@ -47,5 +49,16 @@ struct source_fifo_params {
 };
 
 struct source *source_fifo_create(struct source_fifo_params const *params);
+
+
+struct source_socket_params {
+	char const		*host;
+	char const		*port;
+	int			type;
+	int			family;
+};
+
+struct source *source_fifo_create(struct source_fifo_params const *params);
+struct source *source_socket_create(struct source_socket_params const *params);
 
 #endif	/* H_ENSC_LIB_SOURCE_H */

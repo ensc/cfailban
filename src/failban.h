@@ -24,11 +24,16 @@
 #define _initfn		__attribute__((__section__(".text.initfn")))
 
 struct parser_context;
+struct ip_whitelist;
 
 struct environment {
 	struct list_head	rules;
 	struct list_head	sources;
 	struct list_head	subprocesses;
+	struct list_head	pending;
+
+	struct ip_whitelist	*whitelist;
+	size_t			num_whitelist;
 
 	bool			shutdown;
 
@@ -43,6 +48,9 @@ struct environment {
 		char const	*ip6tables_prog;
 		char const	*chain;
 		char const	*target;
+		bool		manage;
+
+		bool		_memallocated;
 	}			filter;
 
 	union {
@@ -73,5 +81,12 @@ void _noreturn_	filter_run(struct subprocess *, struct environment *env);
 void _noreturn_	sources_run(struct subprocess *, struct environment *env);
 
 void	environment_free(struct environment *env);
+
+bool subprocess_block_signals(void);
+
+struct ip_whitelist;
+struct trigger_ip;
+bool whitelist_match(struct ip_whitelist const *wlist, size_t num_wlist,
+		     struct trigger_ip const *ip);
 
 #endif	/* H_SIMPLEBAN_SRC_FAILBAN_H */

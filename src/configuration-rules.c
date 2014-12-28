@@ -174,7 +174,7 @@ static bool test_register(struct list_head *tests, dictionary *dict,
 
 	res->test = str;
 	res->name = name;
-	
+
 	list_add_tail(&res->head, tests);
 
 	return true;
@@ -212,7 +212,7 @@ static bool test_run(struct rule const *rule, struct rule_test const *test)
 			/* handle no-match tests */
 			if (exp_len == 0)
 				found = true;
-			
+
 			continue;
 		}
 
@@ -221,10 +221,10 @@ static bool test_run(struct rule const *rule, struct rule_test const *test)
 
 		BUG_ON(ip_cur.family == AF_INET  && ip_cur.len != 32/8);
 		BUG_ON(ip_cur.family == AF_INET6 && ip_cur.len != 128/8);
-		
+
 		inet_ntop(ip_cur.family, ip_cur.ip.buf, ip_buf, ARRAY_SIZE(ip_buf));
 		ldbg("regexp matches: '%s'", ip_buf);
-		
+
 		if (exp_len == 0) {
 			lerr("test '%s' of rule '%s' failed; found match '%s' in no-match test",
 			     test->name, rule->name, ip_buf);
@@ -267,11 +267,11 @@ static bool run_tests(struct rule const *rule, struct list_head const *tests)
 	bool			failed = false;
 
 	ltraceA("rule=" RULE_FMT ", tests=%p", RULE_ARG(rule), tests);
-	
+
 	list_foreach_entry(t, tests, head) {
 		ltrace("test='%s'", t->name);
 		log_push(L_TRACE, 0);
-		
+
 		if (!test_run(rule, t))
 			failed = true;
 	}
@@ -297,7 +297,7 @@ static void free_tests(struct list_head *tests)
 		free(t);
 	}
 }
-	
+
 static bool parse_rule(dictionary *dict, struct list_head *rules,
 		       char const *sec_name, char const *rule_name)
 {
@@ -313,6 +313,7 @@ static bool parse_rule(dictionary *dict, struct list_head *rules,
 	size_t			num_matches = 0;
 	char			name_buf[s_len + sizeof(":pattern6:duration")];
 	bool			rc = false;
+	bool			enabled = true;
 
 	ltraceA("dict=%p, rules=%p, sec_name=%s, rule_name=%s",
 		dict, rules, sec_name, rule_name);
@@ -351,6 +352,8 @@ static bool parse_rule(dictionary *dict, struct list_head *rules,
 			cnt_matches = 1;
 		} else if (strncmp(base, "test_", 5) == 0) {
 			rc = test_register(&tests, dict, base, key);
+		} else if (strcmp(base, "disabled") == 0) {
+			enabled = !iniparser_getboolean(dict, key, false);
 		} else {
 			continue;
 		}
@@ -374,7 +377,7 @@ static bool parse_rule(dictionary *dict, struct list_head *rules,
 		goto out;
 
 	rule->matches = Xcalloc(num_matches, sizeof matches[0]);
-	for (size_t i = 0; i < num_matches; ++i) {	
+	for (size_t i = 0; i < num_matches; ++i) {
 		if (!copy_match(&rule->matches[i], &raw_matches[i]))
 			goto out;
 
@@ -390,13 +393,16 @@ static bool parse_rule(dictionary *dict, struct list_head *rules,
 	if (!run_tests(rule, &tests))
 		goto out;
 
-	list_add_tail(&rule->head, rules);
+	if (enabled)
+		list_add_tail(&rule->head, rules);
+
 	rc = true;
 
 out:
-	ltraceD("rc=%d, rule=" RULE_FMT, rc, RULE_ARG(rule));
+	ltraceD("rc=%d, enabled=%d, rule=" RULE_FMT,
+		rc, enabled, RULE_ARG(rule));
 
-	if (!rc) {
+	if (!rc || !enabled) {
 		rule_free(rule);
 	}
 

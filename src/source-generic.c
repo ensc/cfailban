@@ -27,6 +27,7 @@
 #include <ensc-lib/strbuf.h>
 
 #include "logging.h"
+#include "util.h"
 
 #define DEBUG_CATEGORY		3
 
@@ -147,7 +148,10 @@ static bool source_generic_read(struct source *s)
 		r_len = ARRAY_SIZE(sg->buf) - sg->r_len;
 	}
 
-	l = read(sg->s.fd, sg->buf + r_pos, r_len);
+	if (sg->s.read_ll)
+		l = sg->s.read_ll(&sg->s, sg->buf + r_pos, r_len);
+	else
+		l = read(sg->s.fd, sg->buf + r_pos, r_len);
 
 	ldbg("read(%d, %zu, %zu) -> %zd", sg->s.fd, r_pos, r_len, l);
 
@@ -187,7 +191,7 @@ static void source_generic_get_line(struct source *s, struct strbuf *line)
 	size_t				eol_pos;
 
 	ltraceA("s=" SOURCE_GENERIC_FMT ", p=%p", SOURCE_GENERIC_ARG(sg), line);
-	
+
 	source_generic_selfcheck(sg);
 
 	strbuf_clear(line);
@@ -249,17 +253,13 @@ void source_generic_init(struct source_generic *sg,
 
 void source_generic_destroy(struct source_generic *sg)
 {
-	if (sg->s.fd != -1)
-		close(sg->s.fd);
-
+	xclose(&sg->s.fd);
 	freec(sg->s.name);
 }
 
 bool source_generic_open(struct source_generic *sg, int fd)
 {
-	if (sg->s.fd != -1)
-		close(sg->s.fd);
-
+	xclose(&sg->s.fd);
 	sg->s.fd = fd;
 
 	source_generic_flush(&sg->s);

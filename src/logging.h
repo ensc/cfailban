@@ -50,7 +50,7 @@
 #define LIST_FMT "%p[%p, %p]"
 #define LIST_ARG(_l)				\
 	(_l),					\
-	((_l) ? (_l)->prev : NULL), 		\
+	((_l) ? (_l)->prev : NULL),		\
 	((_l) ? (_l)->next : NULL)
 
 #define TIMESPEC_FMT	"%ld.%09lu"
@@ -73,11 +73,13 @@
 	TIMESPEC_ARG((_t) ? &(_t)->eob : NULL)
 
 #define SOURCE_GENERIC_FMT	"%p[%zu+%zu|%zu]"
-#define SOURCE_GENERIC_ARG(_sg)			\
+#define SOURCE_GENERIC_ARG_(_sg)		\
 	(_sg),					\
 	((_sg) ? (_sg)->r_pos : 0u),		\
-	((_sg) ? (_sg)->r_len : 0u), 		\
+	((_sg) ? (_sg)->r_len : 0u),		\
 	((_sg) ? (_sg)->eol_pos : 0u)
+#define SOURCE_GENERIC_ARG(_sg)		\
+	(_sg), (_sg)->r_pos, (_sg)->r_len, (_sg)->eol_pos
 
 #define ldbg(...)	log_msg(L_DEBUG, DEBUG_CATEGORY, ## __VA_ARGS__)
 #define ldbgA(...)	log_msg(L_DEBUG|L_PUSH, DEBUG_CATEGORY, ## __VA_ARGS__)

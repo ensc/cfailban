@@ -137,7 +137,7 @@
 
 #ifdef _lint
 # include "compiler-lint.h"
-#elif defined(__GNUC__)
+#elif defined(__GNUC__) || defined(__clang__)
 # include "compiler-gcc.h"
 #else
 # error "Unsupporter compiler"

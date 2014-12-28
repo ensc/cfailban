@@ -43,11 +43,12 @@
 #include "logging.h"
 #include "rules.h"
 #include "source.h"
+#include "util.h"
 
 #define DEBUG_CATEGORY	1
 
-int		_log_fd;
-static bool	is_quiet;
+int			_log_fd;
+static unsigned int	g_debug_level = (L_INFO|L_WARN|L_ERR|L_PANIC);
 
 void alloc_error(char const *src_func, char const *file, unsigned int line,
 		 char const *alloc_func)
@@ -58,18 +59,7 @@ void alloc_error(char const *src_func, char const *file, unsigned int line,
 
 unsigned int _log_get_debug_level(unsigned int domain)
 {
-	if (is_quiet)
-		return 0;
-	else
-		return L_MASK_LEVELS;
-}
-
-static void xclose(int *fd)
-{
-	if (*fd != -1) {
-		close(*fd);
-		*fd = -1;
-	}
+	return g_debug_level;
 }
 
 static void subprocess_init(struct subprocess *sp, char const *name)
@@ -114,11 +104,20 @@ static bool subprocess_spawn(struct subprocess *sp,
 	} else if (pid == 0) {
 		struct subprocess	*p;
 
+		list_foreach_entry(p, &env->pending, head) {
+			if (p == sp)
+				continue;
+
+			close(p->fd_parser_to_filter);
+		};
+
 		/* we are the child; close communication pipes of other
 		 * subprocesses */
 		list_foreach_entry(p, &env->subprocesses, head) {
 			close(p->fd_main_to_sub);
 			close(p->fd_sub_to_main);
+
+			BUG_ON(p->fd_parser_to_filter != -1);
 		}
 
 		sp->fd_main_to_sub = pipe_out[0];
@@ -140,7 +139,9 @@ static bool subprocess_spawn(struct subprocess *sp,
 		close(pipe_out[0]);
 		close(pipe_in[1]);
 
-		list_add_tail(&sp->head, &env->subprocesses);
+		xclose(&sp->fd_parser_to_filter);
+
+		list_move_tail(&sp->head, &env->subprocesses);
 	}
 
 
@@ -230,7 +231,7 @@ out:
 void environment_free(struct environment *env)
 {
 	ltraceA("env=%p", env);
-	
+
 	ldbgA("destroying rules");
 	while (!list_empty(&env->rules)) {
 		struct rule	*r =
@@ -251,17 +252,118 @@ void environment_free(struct environment *env)
 	}
 	ldbgD("sources destroyed");
 
+	free(env->whitelist);
+
+	if (env->filter._memallocated) {
+		freec(env->filter.ip4tables_prog);
+		freec(env->filter.ip6tables_prog);
+		freec(env->filter.chain);
+		freec(env->filter.target);
+	}
+	
 	ltraceD("-->");
+}
+
+static bool parse_args(struct environment *env,
+		       int argc, char *argv[])
+{
+	struct gengetopt_args_info	args;
+	bool				rc = false;
+
+	if (cmdline_parser(argc, argv, &args))
+		goto out;
+
+	/* this is a little bit special; set 'is_quiet' as early as
+	 * possible */
+	if (args.quiet_flag)
+		g_debug_level = 0;
+	else if (args.debug_flag)
+		g_debug_level = L_MASK_LEVELS;
+
+	rc = configuration_read(&args, env);
+	cmdline_parser_free(&args);
+
+out:
+	return rc;
+}
+
+bool subprocess_block_signals(void)
+{
+	sigset_t	mask;
+	int		rc;
+
+	sigemptyset(&mask);
+	sigaddset(&mask, SIGINT);
+	sigaddset(&mask, SIGQUIT);
+
+	rc = sigprocmask(SIG_BLOCK, &mask, NULL);
+	if (rc < 0) {
+		lerr("sigprocmask(): %m");
+		goto out;
+	}
+
+out:
+	return rc >= 0;
+}
+
+
+static int create_signalfd(void)
+{
+	sigset_t	mask;
+	int		rc;
+
+	sigemptyset(&mask);
+	sigaddset(&mask, SIGINT);
+	sigaddset(&mask, SIGQUIT);
+	sigaddset(&mask, SIGTERM);
+	sigaddset(&mask, SIGHUP);
+
+	rc = sigprocmask(SIG_BLOCK, &mask, NULL);
+	if (rc < 0) {
+		lerr("sigprocmask(): %m");
+		goto out;
+	}
+
+	rc = signalfd(-1, &mask, SFD_CLOEXEC);
+	if (rc < 0) {
+		lerr("signalfd(): %m");
+		goto out;
+	}
+
+out:
+	return rc;
+}
+
+bool whitelist_match(struct ip_whitelist const wlist[], size_t num_wlist,
+		     struct trigger_ip const *ip)
+{
+	bool				match = false;
+	
+	for (size_t i = 0; i < num_wlist && !match; ++i) {
+		struct ip_whitelist const	*w = &wlist[i];
+
+		if (ip->family != w->family)
+			continue;
+
+		BUG_ON(ip->len * 8 != w->len);
+
+		match = true;
+		for (size_t j = 0; j < ip->len && match; ++j)
+			match = ((ip->ip.buf[j] & w->mask.buf[j]) ==
+				 (w->ip.buf[j] & w->mask.buf[j]));
+	}
+
+	return match;
 }
 
 int main(int argc, char *argv[])
 {
-	struct gengetopt_args_info	args;
 	int				rc;
 	struct environment		env = {
 		.rules		= DECLARE_LIST(&env.rules),
 		.sources	= DECLARE_LIST(&env.sources),
 		.subprocesses	= DECLARE_LIST(&env.subprocesses),
+		.pending	= DECLARE_LIST(&env.pending),
 
 		.parser		= {
 			.chroot	= NULL,
@@ -274,6 +376,7 @@ int main(int argc, char *argv[])
 			.ip6tables_prog	= SBINDIR "/ip6tables",
 			.chain		= "check-banned",
 			.target		= "banned",
+			.manage		= true,
 		},
 	};
 	struct subprocess		proc_filter;
@@ -283,24 +386,14 @@ int main(int argc, char *argv[])
 
 	_log_fd = fileno(stderr);
 
+	/* initialize subprocesses here to ease error handling */
 	subprocess_init(&proc_filter, "filter");
 	subprocess_init(&proc_source, "source");
 
-	rc = cmdline_parser(argc, argv, &args);
-	if (rc < 0) {
+	if (!parse_args(&env, argc, argv)) {
 		rc = EX_USAGE;
 		goto out;
 	}
-
-	is_quiet = args.quiet_flag;
-
-	ldbgA("reading configuration file");
-	rc = configuration_read(&args, &env) ? 0 : EX_USAGE;
-	ldbgD("configuration file read");
-	if (rc)
-		goto out;
-
-	cmdline_parser_free(&args);
 
 	if (!subprocess_connect(&proc_source.fd_parser_to_filter,
 				&proc_filter.fd_parser_to_filter)) {
@@ -308,10 +401,13 @@ int main(int argc, char *argv[])
 		goto out;
 	}
 
+	list_add_tail(&proc_source.head, &env.pending);
+	list_add_tail(&proc_filter.head, &env.pending);
+
 	rc = (subprocess_spawn(&proc_filter, &env, filter_run) &&
 	      subprocess_spawn(&proc_source, &env, sources_run)) ? 0 : -1;
-	
-	/* close inter-process communication pipe */
+
+	/* close inter-process communication pipe in the main process */
 	xclose(&proc_source.fd_parser_to_filter);
 	xclose(&proc_filter.fd_parser_to_filter);
 
@@ -321,28 +417,13 @@ int main(int argc, char *argv[])
 		goto out;
 	}
 
-	{
-		sigset_t	mask;
-
-		sigemptyset(&mask);
-		sigaddset(&mask, SIGINT);
-		sigaddset(&mask, SIGQUIT);
-		sigaddset(&mask, SIGTERM);
-		sigaddset(&mask, SIGHUP);
-
-		rc = sigprocmask(SIG_BLOCK, &mask, NULL);
-		if (rc < 0) {
-			lerr("sigprocmask(): %m");
-			goto out;
-		}
-
-		fd_sig = signalfd(-1, &mask, SFD_CLOEXEC);
-		if (fd_sig < 0) {
-			lerr("signalfd(): %m");
-			goto out;
-		}
+	fd_sig = create_signalfd();
+	if (fd_sig < 0) {
+		lerr("failed to create signal-fd");
+		rc = EX_OSERR;
+		goto out;
 	}
-	
+
 	list_foreach_entry(proc, &env.subprocesses, head) {
 		if (!subprocess_wait_init(proc))
 			goto out;
@@ -370,6 +451,7 @@ int main(int argc, char *argv[])
 
 		if (rc < 0) {
 			lerr("poll(): %m");
+			rc = EX_OSERR;
 			goto out;
 		}
 
@@ -391,8 +473,6 @@ out:
 	ldbgD("subprocesses terminated");
 
 	environment_free(&env);
-
-	cmdline_parser_free(&args);
 
 	return rc;
 }

@@ -116,6 +116,58 @@ static bool read_user(uid_t *uid, gid_t *gid, dictionary *dict, char *base,
 	return res;
 }
 
+static bool read_stype(int *proto, dictionary *dict, char *base,
+		       char const *key, bool is_critical)
+{
+	size_t		l = strlen(base);
+	char const	*tmp;
+	bool		res = true;
+
+	strcpy(base + l, key);
+	tmp = iniparser_getstring(dict, base, NULL);
+	base[l] = '\0';
+
+	if (!tmp) {
+		res = !is_critical;
+	} else if (strcmp(tmp, "tcp") == 0 || strcmp(tmp, "stream") == 0) {
+		*proto = SOCK_STREAM;
+	} else if (strcmp(tmp, "udp") == 0 || strcmp(tmp, "dgram") == 0) {
+		*proto = SOCK_DGRAM;
+	} else {
+		lerr("invalid protocol '%s' at %s:%s", tmp, base, key);
+		res = false;
+	}
+
+	return res;
+}
+
+static bool read_family(int *family, dictionary *dict, char *base,
+		       char const *key, bool is_critical)
+{
+	size_t		l = strlen(base);
+	char const	*tmp;
+	bool		res = true;
+
+	strcpy(base + l, key);
+	tmp = iniparser_getstring(dict, base, NULL);
+	base[l] = '\0';
+
+	if (!tmp) {
+		res = !is_critical;
+	} else if (strcmp(tmp, "ip") == 0 || strcmp(tmp, "ip4") == 0) {
+		*family = AF_INET;
+	} else if (strcmp(tmp, "ip6")) {
+		*family = AF_INET6;
+	} else if (strcmp(tmp, "unix") == 0 || strcmp(tmp, "local") == 0) {
+		*family = AF_UNIX;
+	} else {
+		lerr("invalid family '%s' at %s:%s", tmp, base, key);
+		res = false;
+	}
+
+	return res;
+}
+
 static bool read_group(gid_t *gid, dictionary *dict,
 		       char *base, char const *key, bool is_critical)
 {
@@ -170,6 +222,45 @@ out:
 	return res;
 }
 
+static struct source *_source_socket_create(dictionary *dict, char const *sec)
+{
+	size_t		sec_len = strlen(sec);
+	char		base[sec_len + sizeof(":manage")];
+	struct source	*res = NULL;
+
+	struct source_socket_params	cfg = {
+		.host	= "localhost",
+		.port	= "516",
+		.type	= SOCK_STREAM,
+		.family	= AF_UNSPEC
+	};
+
+	strcpy(base, sec);
+	strcat(base, ":");
+
+	if (!read_string(&cfg.host, dict, base, "host", true) ||
+	    !read_string(&cfg.port, dict, base, "port", true) ||
+	    !read_stype(&cfg.type, dict, base, "stype", false) ||
+	    !read_family(&cfg.family, dict, base, "family", false)) {
+		lerr("failed to read section '%s'", sec);
+		goto out;
+	}
+
+	res = source_socket_create(&cfg);
+	if (!res) {
+		lerr("failed to create FIFO source object for section '%s'",
+		     sec);
+		goto out;
+	}
+
+	log_msg(L_INFO, DEBUG_CATEGORY,
+		"created FIFO source [%s:%s, %d, %d]",
+		cfg.host, cfg.port, cfg.type, cfg.family);
+
+out:
+	return res;
+}
+
 static struct source *
 configuration_create_source(struct _dictionary_ *dict,
 			    char const *sec, char const *name)
@@ -180,7 +271,7 @@ configuration_create_source(struct _dictionary_ *dict,
 	struct source	*source = NULL;
 
 	ltraceA("dict=%p, sec=%s, name=%s", dict, sec, name);
-	
+
 	strcpy(base, sec);
 	strcat(base, ":type");
 
@@ -194,6 +285,8 @@ configuration_create_source(struct _dictionary_ *dict,
 
 	if (strcmp(type, "fifo") == 0)
 		source = _source_fifo_create(dict, sec);
+	else if (strcmp(type, "socket") == 0)
+		source = _source_socket_create(dict, sec);
 	else {
 		lerr("unknown source type '%s'", type);
 		goto out;

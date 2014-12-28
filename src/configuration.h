@@ -21,6 +21,7 @@
 #include <stdlib.h>
 #include <stdint.h>
 
+struct ip_whitelist;
 struct environment;
 struct _dictionary_;
 struct list_head;
@@ -30,6 +31,13 @@ bool configuration_parse_rules(struct _dictionary_ *dict,
 
 bool configuration_parse_sources(struct _dictionary_ *dict,
 				 struct list_head *rules);
+
+bool configuration_parse_whitelist(struct _dictionary_ *dict,
+				   struct ip_whitelist **wlist,
+				   size_t *num_wlist);
+
+bool configuration_parse_filter(struct _dictionary_ *dict,
+				struct environment *env);
 
 char const *configuration_lookup_placeholder(char const *str, size_t len);
 

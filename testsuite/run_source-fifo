@@ -43,7 +43,7 @@ run() {
   done
 
   read pid < $t/pid
-  
+
   test -w "$SOCK" || panic "program failed to start"
 
   run_$1 "$pid" "$SOCK" "$t/out"
@@ -55,7 +55,7 @@ run() {
 
 send_cont() {
   local sleep=
-  
+
   while test -e "$t/pid"; do
       kill -s CONT -- "$1"
 

@@ -1,12 +1,11 @@
-abs_top_srcdir = $(dir $(abspath $(firstword $(MAKEFILE_LIST))))
+PACKAGE = cfailban
+VERSION = 0.0.1
+
+srcdir = $(dir $(firstword $(MAKEFILE_LIST)))
+
+include $(srcdir)/ensc-lib/build-simple.mk
+
 VPATH += $(abs_top_srcdir)
-
-include $(abs_top_srcdir)/ensc-lib/build-simple.mk
-
-GENGETOPT = gengetopt
-
-C_FLTO = -flto
-LD_FLTO = -fuse-linker-plugin ${C_FLTO}
 
 AM_CPPFLAGS = \
 	-I $(abs_top_srcdir) -I $(abs_top_builddir) \
@@ -21,43 +20,56 @@ AM_LDFLAGS = \
 
 CFLAGS = -Wall -W -Werror -Wno-unused-parameter -Wmissing-prototypes -Wshadow -O1 -g3
 
-bin_PROGRAMS = failban
-test_PROGRAMS = testsuite/source-fifo
+bin_PROGRAMS = cfailban
 
-failban_SOURCES = \
-	src/failban.ggo \
-	src/failban.c \
-	src/configuration.c \
-	src/configuration.h \
+test_PROGRAMS = testsuite/source-fifo
+test_SCRIPTS = testsuite/run_source-fifo
+
+cfailban_SOURCES = \
 	src/configuration-rules.c \
 	src/configuration-source.c \
+	src/configuration-filter.c \
+	src/configuration-whitelist.c \
+	src/configuration.c \
+	src/configuration.h \
+	src/failban.c \
+	src/failban.ggo.in \
+	src/failban.h \
+	src/filter.c \
+	src/logging.h \
 	src/rules.c \
 	src/rules.h \
-	src/filter.c \
 	src/source-fifo.c \
+	src/source-socket.c \
 	src/source-generic.c \
 	src/source-generic.h \
 	src/source.c \
 	src/source.h \
-	src/logging.h \
-	ensc-lib/list.h \
-	ensc-lib/io.c \
-	ensc-lib/io.h \
-	ensc-lib/logging.c \
-	ensc-lib/logging.h \
+	ensc-lib/compiler-gcc.h \
+	ensc-lib/compiler-lint.h \
+	ensc-lib/compiler.h \
 	ensc-lib/iniparser-pwdb.c \
 	ensc-lib/iniparser.h \
+	ensc-lib/io.c \
+	ensc-lib/io.h \
+	ensc-lib/list.h \
+	ensc-lib/logging.c \
+	ensc-lib/logging.h \
+	ensc-lib/safe_calloc.h \
+	ensc-lib/strbuf.h \
+	ensc-lib/timespec.h \
+	ensc-lib/xalloc.h \
 
-failban_OBJECTS = \
+cfailban_OBJECTS = \
 	src/failban-cmdline.o
 
-failban_LIBS = \
+cfailban_LIBS = \
 	-liniparser \
 	-lcom_err
 
 CFLAGS_src/failban-cmdline.o = -Wno-unused-but-set-variable
 
-CPPFLAGS_failban = -I ${abs_top_builddir}/src
+CPPFLAGS_cfailban = -I ${abs_top_builddir}/src
 
 testsuite/source-fifo_SOURCES = \
 	testsuite/source-fifo.c \
@@ -72,17 +84,29 @@ testsuite/source-fifo_LIBS = \
 	-lcom_err
 
 BUILT_SOURCES = \
+	src/failban.ggo \
 	src/failban-cmdline.c \
 	src/failban-cmdline.h \
+
+ALL_SOURCES = \
+	Makefile \
+	cfailban.conf \
+	${cfailban_SOURCES} \
+	${testsuite/source-fifo_SOURCES} \
+	${test_SCRIPTS}
+
+SED_CMD = \
+	-e 's!@SYSCONFDIR@!${sysconfdir}!g'
 
 #################################
 
 all:	$(bin_PROGRAMS) $(test_PROGRAMS)
 
-failban:	${failban_SOURCES} ${failban_OBJECTS}
+cfailban:	${cfailban_SOURCES} ${cfailban_OBJECTS}
 	$(CC) $(call _buildflags,C) $(filter %.c %.o,$^) -o $@ $($@_LIBS)
 
-testsuite/source-fifo:	${testsuite/source-fifo_SOURCES} ${testsuite/source-fifo_OBJECTS}
+testsuite/source-fifo:	${testsuite/source-fifo_SOURCES} ${testsuite/source-fifo_OBJECTS} \
+	| testsuite/.dirstamp
 	$(CC) $(call _buildflags,C) $(filter %.c %.o,$^) -o $@ $($@_LIBS)
 
 src/failban-cmdline.o:	src/failban-cmdline.c src/failban-cmdline.h
@@ -92,7 +116,13 @@ src/failban-cmdline.c src/failban-cmdline.h:	src/.failban-cmdline.stamp
 
 src/.%-cmdline.stamp:	src/%.ggo | src/.dirstamp
 	$(GENGETOPT) -i $< -F ${@D}/$*-cmdline
-	touch $@
+	@touch $@
+
+src/%.ggo:	src/%.ggo.in | src/.dirstamp
+	-rm -f $@ $@.tmp
+	$(SED) $(SED_CMD) $< >$@.tmp
+	chmod a-w $@.tmp
+	mv $@.tmp $@
 
 %/.dirstamp:
 	mkdir -p ${@D}
@@ -100,7 +130,7 @@ src/.%-cmdline.stamp:	src/%.ggo | src/.dirstamp
 
 clean:
 	rm -f .*stamp */.*stamp *.o */*.o
-	rm -f ${BUILT_SOURCES}
+	rm -f ${BUILT_SOURCES} ${bin_PROGRAMS} ${test_PROGRAMS}
 
-check-syntax:
-	$(CC) $(call _buildflags,C) ${CHK_SOURCES} -o /dev/null -c
+$(eval $(call _distrule,${ALL_SOURCES}))
+$(eval $(call _checkrules,${ALL_SOURCES}))

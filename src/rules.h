@@ -72,6 +72,25 @@ struct trigger {
 	struct timespec		eob;	/* end-of-blocking */
 };
 
+struct ip_whitelist {
+	struct list_head	head;
+	sa_family_t		family;
+	socklen_t		len;
+
+	union {
+		unsigned char	buf[1];
+		struct in_addr	ip4;
+		struct in6_addr	ip6;
+	}			ip;
+
+	union {
+		unsigned char	buf[1];
+		uint8_t		u8;
+		struct in_addr	ip4;
+		struct in6_addr	ip6;
+	}			mask;
+};
+
 struct rule *rule_alloc(char const *name);
 void rule_free(struct rule *rule);
 
@@ -79,7 +98,6 @@ struct trigger *rule_trigger(struct rule *rule, struct trigger_ip const *ip,
 			     struct timespec const *now);
 
 void trigger_free(struct trigger *trigger);
-
 
 bool match_check(struct trigger_ip *ip,
 		 struct match const *match, char const *str);

@@ -113,8 +113,10 @@ inline static void	strbuf_append_buf(struct strbuf *buf,
 {
 	strbuf_allocate(buf, l);
 
-	memcpy(&buf->b[buf->len], s, l);
-	buf->len += l;
+	if (l > 0) {
+		memcpy(&buf->b[buf->len], s, l);
+		buf->len += l;
+	}
 }
 
 inline static void	strbuf_append_str(struct strbuf *buf, char const *s)

@@ -36,12 +36,14 @@
 #include "failban.h"
 #include "rules.h"
 #include "logging.h"
+#include "util.h"
 
 #define DEBUG_CATEGORY	4
 
 struct parser_context {
 	struct list_head	blocked_items;
 	struct subprocess	*proc;
+	bool			can_reopen;
 };
 
 struct epoll_handler {
@@ -66,6 +68,8 @@ static bool sources_register_source(int epollfd, struct source_handler *hdl)
 	};
 	int			rc;
 
+	BUG_ON(!s);
+
 	rc = epoll_ctl(epollfd, EPOLL_CTL_ADD, s->fd, &ev);
 	if (rc < 0) {
 		lerr("epoll_ctl(ADD, source/%s): %m",
@@ -75,7 +79,7 @@ static bool sources_register_source(int epollfd, struct source_handler *hdl)
 
 out:
 	return rc >= 0;
-	
+
 }
 
 
@@ -89,7 +93,7 @@ static void sources_block(struct environment *env,
 	struct list_head	*prev_head = NULL;
 
 	is_new = (trigger->eob.tv_sec == 0 && trigger->eob.tv_nsec == 0);
-	
+
 	BUG_ON( is_new && !list_empty(&trigger->head));
 	BUG_ON(!is_new &&  list_empty(&trigger->head));
 
@@ -97,7 +101,7 @@ static void sources_block(struct environment *env,
 	timespec_add_ns(&trigger->eob, 1000000000ull * rule->ban_duration);
 
 	list_del_init(&trigger->head);
-	
+
 	if (is_new) {
 		int	out_fd = ctx->proc->fd_parser_to_filter;
 		if (!write_all(out_fd, "+", 1) ||
@@ -130,7 +134,7 @@ static void sources_handle_line(struct environment *env,
 {
 	struct rule		*rule;
 	struct timespec		now;
-	
+
 	ldbg("handle line '%.*s'", (int)str->len, str->b);
 
 	clock_gettime(CLOCK_BOOTTIME, &now);
@@ -140,7 +144,7 @@ static void sources_handle_line(struct environment *env,
 		struct trigger_ip	ip;
 		bool			found = false;
 		char			ipbuf[INET6_ADDRSTRLEN];
-	
+
 		for (size_t i = 0; i < rule->num_matches && !found; ++i)
 			found = match_check(&ip, &rule->matches[i],
 					    strbuf_to_str(str, false));
@@ -152,9 +156,16 @@ static void sources_handle_line(struct environment *env,
 		}
 
 		BUG_ON(ip.family != AF_INET && ip.family != AF_INET6);
-		
+
 		ldbg("matched ip " IP_FMT " by rule '%s'",
-			IP_ARG(&ip, ipbuf), rule->name);
+		     IP_ARG(&ip, ipbuf), rule->name);
+
+		if (whitelist_match(env->whitelist, env->num_whitelist, &ip)) {
+			log_msg(L_INFO, DEBUG_CATEGORY,
+				"ip " IP_FMT " whitelisted; skipping",
+				IP_ARG(&ip, ipbuf));
+			continue;
+		}
 
 		trigger = rule_trigger(rule, &ip, &now);
 
@@ -177,16 +188,16 @@ static bool sources_handle_source(struct epoll_handler *h,
 	ldbg("got event %04x from source '%s'", events, s->name);
 
 	if (events & EPOLLIN) {
-		if (!s->read(s)) {
-			lerr("failed to read from source '%s'", s->name);
-			do_reopen = true;
-		} else {
+		if (s->read(s)) {
 			while (s->has_line(s)) {
 				s->get_line(s, shdl->buf);
 				sources_handle_line(h->env, s, shdl->buf);
 
 				do_reopen = false;
 			}
+		} else if (errno != EAGAIN && errno != EINTR) {
+			lerr("failed to read from source '%s'", s->name);
+			do_reopen = true;
 		}
 	}
 
@@ -198,7 +209,7 @@ static bool sources_handle_source(struct epoll_handler *h,
 
 		epoll_ctl(epollfd, EPOLL_CTL_DEL, s->fd, NULL);
 
-		if (!s->reopen(s)) {
+		if (!s->reopen(s, h->env->ctx.parser->can_reopen)) {
 			lerr("failed to reopen source '%s'", s->name);
 			return false;
 		}
@@ -234,7 +245,7 @@ static void sources_gc(struct environment *env, int timer_fd)
 
 	list_foreach_entry_save(trigger, tmp, &ctx->blocked_items, head) {
 		char		ipbuf[INET6_ADDRSTRLEN];
-	
+
 		if (timespec_before(&now, &trigger->eob)) {
 			next_tm = &trigger->eob;
 			break;
@@ -255,10 +266,9 @@ static void sources_gc(struct environment *env, int timer_fd)
 		struct itimerspec	tspec = {
 			.it_value	= *next_tm,
 		};
-		bool			rc;
+		int			rc;
 
-		rc = timerfd_settime(timer_fd, TFD_TIMER_ABSTIME,
-				     &tspec, NULL);
+		rc = timerfd_settime(timer_fd, TFD_TIMER_ABSTIME, &tspec, NULL);
 		if (rc < 0)
 			lwarn("timerfd_settime(): %m");
 	}
@@ -277,156 +287,195 @@ static bool sources_handle_timer(struct epoll_handler *h,
 	return true;
 }
 
-void sources_run(struct subprocess *proc, struct environment *env)
+static bool open_sources(struct environment *env, size_t *num_sources,
+			 struct source_handler **handlers,
+			 struct strbuf *buf)
 {
-	int				rc;
-	struct source_handler		*source_handlers = NULL;
-	size_t				num_sources = 0;
-	int				epollfd = -1;
-	struct strbuf			buf = INIT_STRBUF(&buf);
-	struct epoll_handler		main_handler = {
-		.fn	= sources_handle_main,
-		.env	= env,
-		.fd	= proc->fd_main_to_sub,
-	};
-	struct parser_context		ctx = {
-		.blocked_items	= DECLARE_LIST(&ctx.blocked_items),
-		.proc		= proc,
-	};
-	struct epoll_handler		timer_handler = {
-		.fn	= sources_handle_timer,
-		.env	= env,
-	};
-	
-	env->ctx.parser = &ctx;
+	struct source		*s;
+	size_t			i;
+	size_t			cnt = 0;
+	struct source_handler	*hdl = NULL;
+	bool			rc = false;
 
-	ldbgA("opening sources");
-	{
-		struct source	*s;
-		size_t		i;
-		
-		list_foreach_entry(s, &env->sources, head) {
-			if (!s->open(s)) {
-				log_msg(L_ERR | L_POP, 2,
-					"failed to open source '%s'", s->name);
-				rc = -1;
-				goto out;
-			}
+	ltraceA("env=%p, num_sources=%p, handlers=%p, buf=%p",
+		env, num_sources, handlers, buf);
 
-			++num_sources;
-		}
-
-		source_handlers = Xcalloc(num_sources,
-					  sizeof source_handlers[0]);
-
-		i = 0;
-		list_foreach_entry(s, &env->sources, head) {
-			struct source_handler	*h = &source_handlers[i];
-
-			h->h.fn  = sources_handle_source;
-			h->h.env = env;
-			h->h.fd  = s->fd;
-			h->s     = s;
-			h->buf   = &buf;
-
-			++i;
-		}
-	}
-	ldbgD("sources opened");
-
-	epollfd = epoll_create1(EPOLL_CLOEXEC);
-	if (epollfd < 0) {
-		lerr("epoll_create1(): %m");
-		rc = -1;
-		goto out;
-	}
-
-	for (size_t i =0; i < num_sources; ++i) {
-		if (!sources_register_source(epollfd, &source_handlers[i])) {
-			rc = -1;
+	list_foreach_entry(s, &env->sources, head) {
+		if (!s->open(s)) {
+			lerr("failed to open source '%s'", s->name);
 			goto out;
 		}
+
+		++cnt;
 	}
 
-	timer_handler.fd = timerfd_create(CLOCK_BOOTTIME, TFD_CLOEXEC | TFD_NONBLOCK);
-	if (timer_handler.fd < 0) {
-		lerr("timerfd_create(): %m");
-		rc = -1;
-		goto out;
+	hdl = Xcalloc(cnt, sizeof hdl[0]);
+
+	i = 0;
+	list_foreach_entry(s, &env->sources, head) {
+		struct source_handler	*h = &hdl[i];
+
+		h->h.fn  = sources_handle_source;
+		h->h.env = env;
+		h->h.fd  = s->fd;
+		h->s     = s;
+		h->buf   = buf;
+
+		++i;
 	}
 
-	{
-		struct epoll_event	ev = {
-			.events		= EPOLLIN,
-			.data		= { .ptr = &timer_handler },
-		};
+	*num_sources = cnt;
+	*handlers = hdl;
 
-		rc = epoll_ctl(epollfd, EPOLL_CTL_ADD, timer_handler.fd, &ev);
-		if (rc < 0) {
-			lerr("epoll_ctl(ADD, timer): %m");
-			goto out;
-		}
-	}
-	
-	{
-		struct epoll_event	ev = {
-			.events		= EPOLLIN,
-			.data		= { .ptr = &main_handler },
-		};
+	rc = true;
 
-		rc = epoll_ctl(epollfd, EPOLL_CTL_ADD, main_handler.fd, &ev);
-		if (rc < 0) {
-			lerr("epoll_ctl(ADD, main): %m");
-			goto out;
-		}
-	}
-	
+out:
+	ltraceD("--> %d/%zu, %p", rc, *num_sources, *handlers);
+
+	return rc;
+}
+
+static bool drop_perm(struct environment *env)
+{
+	int			rc;
+	struct parser_context	*ctx = env->ctx.parser;
+
 	if (env->parser.chroot) {
 		rc = chroot(env->parser.chroot);
 		if (rc < 0) {
 			lerr("chroot(%s): %m", env->parser.chroot);
 			goto out;
 		}
+
+		ctx->can_reopen = false;
 	}
 
 	if (env->parser.gid != (gid_t)(-1)) {
 		gid_t	gid =env->parser.gid;
-		
+
 		rc = setresgid(gid, gid, gid);
 		if (rc < 0) {
 			lerr("setresgid(%d): %m", gid);
 			goto out;
 		}
+
+		ctx->can_reopen = false;
 	}
 
 	if (env->parser.uid != (uid_t)(-1)) {
 		uid_t	uid =env->parser.uid;
-		
+
 		rc = setresuid(uid, uid, uid);
 		if (rc < 0) {
 			lerr("setresuid(%d): %m", uid);
 			goto out;
 		}
+
+		if (uid != 0)
+			ctx->can_reopen = false;
 	}
 
-	{
-		sigset_t	mask;
+	rc = 0;
 
-		sigemptyset(&mask);
-		sigaddset(&mask, SIGINT);
-		sigaddset(&mask, SIGQUIT);
-		sigaddset(&mask, SIGTERM);
-		sigaddset(&mask, SIGHUP);
+out:
+	return rc >= 0;
+}
 
-		rc = sigprocmask(SIG_BLOCK, &mask, NULL);
+static int init_epoll(struct source_handler source_handlers[],
+		      size_t num_sources,
+		      struct epoll_handler extra_handler[], size_t num_extra)
+{
+	int		fd;
+	int		rc = -1;
+
+	fd = epoll_create1(EPOLL_CLOEXEC);
+	if (fd < 0) {
+		lerr("epoll_create1(): %m");
+		goto out;
+	}
+
+	for (size_t i = 0; i < num_sources; ++i) {
+		if (!sources_register_source(fd, &source_handlers[i]))
+			goto out;
+	}
+
+	for (size_t i = 0; i < num_extra; ++i) {
+		struct epoll_handler	*hdl = &extra_handler[i];
+		struct epoll_event	ev = {
+			.events		= EPOLLIN,
+			.data		= { .ptr = hdl },
+		};
+
+		rc = epoll_ctl(fd, EPOLL_CTL_ADD, hdl->fd, &ev);
 		if (rc < 0) {
-			lerr("sigprocmask(): %m");
+			lerr("epoll_ctl(ADD, #%zu): %m", i);
 			goto out;
 		}
 	}
-	
+
+out:
+	if (rc < 0) {
+		if (fd >= 0)
+			close(fd);
+		fd = -1;
+	}
+
+	return fd;
+}
+
+void sources_run(struct subprocess *proc, struct environment *env)
+{
+	enum {
+		HDL_MAIN,
+		HDL_TIMER
+	};
+
+	int				rc;
+	struct source_handler		*source_handlers = NULL;
+	size_t				num_sources = 0;
+	int				epollfd = -1;
+	struct strbuf			buf = INIT_STRBUF(&buf);
+	struct epoll_handler		extra_handlers[] = {
+		[HDL_MAIN] = {
+			.fn	= sources_handle_main,
+			.env	= env,
+			.fd	= proc->fd_main_to_sub,
+		},
+		[HDL_TIMER] = {
+			.fn	= sources_handle_timer,
+			.env	= env,
+			.fd	= timerfd_create(CLOCK_BOOTTIME,
+						 TFD_CLOEXEC | TFD_NONBLOCK),
+		},
+	};
+	struct parser_context		ctx = {
+		.blocked_items	= DECLARE_LIST(&ctx.blocked_items),
+		.proc		= proc,
+		.can_reopen	= true,
+	};
+
+	env->ctx.parser = &ctx;
+	rc = -1;
+
+	if (extra_handlers[HDL_TIMER].fd < 0) {
+		lerr("timerfd_create(): %m");
+		goto out;
+	}
+
+	if (!open_sources(env, &num_sources, &source_handlers, &buf))
+		goto out;
+
+	epollfd = init_epoll(source_handlers, num_sources,
+			     extra_handlers, ARRAY_SIZE(extra_handlers));
+	if (epollfd < 0)
+		goto out;
+
+	if (!drop_perm(env) ||
+	    !subprocess_block_signals())
+		goto out;
+
 	ldbg("initialization complete");
-	
+
 	/* signal "initialization complete" */
 	write_all(proc->fd_sub_to_main, "I", 1);
 
@@ -453,15 +502,20 @@ void sources_run(struct subprocess *proc, struct environment *env)
 			}
 		}
 
-		sources_gc(env, timer_handler.fd);
+		sources_gc(env, extra_handlers[HDL_TIMER].fd);
 	}
-	
+
 	rc = 0;
 
 out:
 	strbuf_destroy(&buf);
 	free(source_handlers);
+	xclose(&extra_handlers[1].fd);
+	xclose(&proc->fd_sub_to_main);
+	xclose(&proc->fd_main_to_sub);
+	xclose(&proc->fd_parser_to_filter);
+	xclose(&epollfd);
 	environment_free(env);
-	
+
 	_exit(rc >= 0 ? 0 : 1);
 }

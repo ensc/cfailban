@@ -30,6 +30,7 @@
 #include <ensc-lib/safe_calloc.h>
 
 #include "logging.h"
+#include "util.h"
 
 #define DEBUG_CATEGORY	5
 
@@ -108,21 +109,24 @@ out:
 	return rc >= 0;
 }
 
-static bool source_fifo_reopen(struct source *src)
+static bool source_fifo_reopen(struct source *src, bool full_caps)
 {
 	struct source_fifo		*fifo =
 		container_of(src, struct source_fifo, sg.s);
 	unsigned int			open_flags = 0;
 	int				fd;
 
+	if (!full_caps) {
+		lerr("can not reopen %s without full capabilities",
+		     fifo->params.path);
+		goto out;
+	}
+
 	if (fifo->params.manage)
 		open_flags = O_NOFOLLOW;
 
-	if (src->fd != -1) {
-		close(src->fd);
-		src->fd = -1;
-	}
-	
+	xclose(&src->fd);
+
 	fd = open(fifo->params.path,
 		  O_RDONLY | O_NONBLOCK | O_CLOEXEC | open_flags);
 	if (fd < 0) {
@@ -145,7 +149,7 @@ static void source_fifo_free(struct source *src)
 		container_of(src, struct source_fifo, sg.s);
 
 	ltraceA("src(fifo)=%p[%s]", src, src->name);
-		
+
 	source_generic_destroy(&fifo->sg);
 
 	if (fifo->is_owner)

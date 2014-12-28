@@ -21,6 +21,8 @@
 #include <stdint.h>
 #include <errno.h>
 
+#include "compiler.h"
+
 inline static void *safe_calloc(size_t num, size_t sz)
 {
 	int	have_safe_calloc;
