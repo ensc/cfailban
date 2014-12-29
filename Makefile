@@ -1,5 +1,5 @@
 PACKAGE = cfailban
-VERSION = 0.0.1
+VERSION = 0.1
 
 srcdir = $(dir $(firstword $(MAKEFILE_LIST)))
 
