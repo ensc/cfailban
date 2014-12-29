@@ -73,7 +73,7 @@ static char const	*get_color(unsigned int lvl)
 	if ((lvl & L_MASK_FLAGS) == L_COLOR_PID)
 		return "\e[0;7m";
 	if ((lvl & L_MASK_FLAGS) == L_COLOR_DOMAIN)
-		return DOM_COLORS[(lvl & L_MASK_LEVELS) % 
+		return DOM_COLORS[(lvl & L_MASK_LEVELS) %
 				  ARRAY_SIZE(DOM_COLORS)];
 	if ((lvl & L_ERR))
 		return "\e[1;33;41m";
