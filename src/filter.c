@@ -105,6 +105,10 @@ static void log_success(char const *op, struct trigger const *trigger)
 	char			ipbuf[INET6_ADDRSTRLEN];
 	inet_ntop(ip->family, ip->ip.buf, ipbuf, sizeof ipbuf);
 
+	log_msg(L_INFO, DEBUG_CATEGORY,
+		"rule '%s': succeeded to %s entry for %s",
+		trigger->rule->name, op, ipbuf);
+
 	syslog(LOG_NOTICE, "rule '%s': succeeded to %s entry for %s",
 	       trigger->rule->name, op, ipbuf);
 }
@@ -114,6 +118,9 @@ static void log_failure(char const *op, struct trigger const *trigger)
 	struct trigger_ip const	*ip = &trigger->ip;
 	char			ipbuf[INET6_ADDRSTRLEN];
 	inet_ntop(ip->family, ip->ip.buf, ipbuf, sizeof ipbuf);
+
+	log_msg(L_ERR, DEBUG_CATEGORY, "rule '%s': failed to %s entry for %s",
+		trigger->rule->name, op, ipbuf);
 
 	syslog(LOG_ERR, "rule '%s': failed to %s entry for %s",
 	       trigger->rule->name, op, ipbuf);

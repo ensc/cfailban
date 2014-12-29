@@ -109,13 +109,18 @@ static void sources_block(struct environment *env,
 	list_del_init(&trigger->head);
 
 	if (is_new) {
+		char	ipbuf[INET6_ADDRSTRLEN];
 		int	out_fd = ctx->proc->fd_parser_to_filter;
+
 		if (!write_all(out_fd, "+", 1) ||
 		    !write_all(out_fd, trigger, sizeof *trigger)) {
 			lwarn("failed to send + item to filter");
 			trigger_free(trigger);
 			goto out;
 		}
+
+		log_msg(L_INFO, DEBUG_CATEGORY, "blocked " TRIGGER_FMT,
+			TRIGGER_ARG(trigger, ipbuf));
 	}
 
 	for (prev_head = ctx->blocked_items.prev;
@@ -257,7 +262,8 @@ static void sources_gc(struct environment *env, int timer_fd)
 			break;
 		}
 
-		ldbg("trigger " TRIGGER_FMT " reached EOB",
+		log_msg(L_INFO, DEBUG_CATEGORY,
+			"trigger " TRIGGER_FMT " reached EOB",
 			TRIGGER_ARG(trigger, ipbuf));
 
 		if (!write_all(out_fd, "-", 1) ||
