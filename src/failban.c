@@ -158,17 +158,17 @@ out:
 
 static bool subprocess_connect(int *a, int *b)
 {
-	int		pipe[2];
+	int		pp[2];
 	int		rc;
 
-	rc = pipe2(pipe, O_CLOEXEC);
+	rc = pipe2(pp, O_CLOEXEC);
 	if (rc < 0) {
 		lerr("pipe2(<parser->filter>): %m");
 		return false;
 	}
 
-	*a = pipe[1];
-	*b = pipe[0];
+	*a = pp[1];
+	*b = pp[0];
 
 	return true;
 }

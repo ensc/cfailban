@@ -234,12 +234,12 @@ static void source_generic_get_line(struct source *s, struct strbuf *line)
 }
 
 void source_generic_init(struct source_generic *sg,
-			 bool (*open)(struct source *),
-			 void (*free)(struct source *))
+			 bool (*fn_open)(struct source *),
+			 void (*fn_free)(struct source *))
 {
 	sg->s.fd = -1;
-	sg->s.open = open;
-	sg->s.free = free;
+	sg->s.open = fn_open;
+	sg->s.free = fn_free;
 
 	sg->s.read = source_generic_read;
 	sg->s.has_line = source_generic_has_line;
