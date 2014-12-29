@@ -43,7 +43,7 @@ _buildflags = $(foreach k,CPP $1 LD, $(AM_$2$kFLAGS) $($2$kFLAGS) $($kFLAGS_$@))
 _pkg_get_cflags =	$(shell $(PKG_CONFIG) --cflags $1)
 _pkg_get_libs =		$(shell $(PKG_CONFIG) --libs $1)
 
-_pre_process = echo '$1' | $(CC) $(AM_CPPFLAGS) $(CPPFLAGS) -dM $2 -E -
+_pre_process = echo '$1' | $(CC) $(AM_CPPFLAGS) $(CPPFLAGS) -dD $2 -E -
 _find_symbol = $(shell $(call _pre_process,$2,$3) | grep -q '\<$1\>' && S=HAVE_ || S=NO_; echo "-D$${S}$1=1")
 
 prefix = /usr/local
