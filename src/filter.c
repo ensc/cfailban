@@ -289,7 +289,7 @@ out:
 	if (env->filter.manage)
 		/* ignore errors here */
 		flush_chains(env);
-	
+
 	xclose(&proc->fd_sub_to_main);
 	xclose(&proc->fd_main_to_sub);
 	xclose(&proc->fd_parser_to_filter);
