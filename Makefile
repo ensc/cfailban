@@ -16,6 +16,7 @@ AM_CFLAGS = \
 	-std=gnu99 ${C_FLTO}
 
 AM_LDFLAGS = \
+	-Wl,-as-needed \
 	${LD_FLTO}
 
 CFLAGS = -Wall -W -Werror -Wno-unused-parameter -Wmissing-prototypes -Wshadow -O1 -g3
