@@ -39,6 +39,9 @@ bool configuration_parse_whitelist(struct _dictionary_ *dict,
 bool configuration_parse_filter(struct _dictionary_ *dict,
 				struct environment *env);
 
+bool configuration_parse_parser(struct _dictionary_ *dict,
+				struct environment *env);
+
 char const *configuration_lookup_placeholder(char const *str, size_t len);
 
 bool configuration_get_string(char const **res, struct _dictionary_ *dict,

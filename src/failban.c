@@ -254,6 +254,8 @@ void environment_free(struct environment *env)
 
 	free(env->whitelist);
 
+	freec(env->parser.chroot);
+
 	if (env->filter._memallocated) {
 		freec(env->filter.ip4tables_prog);
 		freec(env->filter.ip6tables_prog);

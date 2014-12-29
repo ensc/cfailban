@@ -243,6 +243,7 @@ bool _initfn configuration_read(struct gengetopt_args_info const *args,
 	if (!configuration_parse_sources(d, &env->sources) ||
 	    !configuration_parse_rules(d, &env->rules) ||
 	    !configuration_parse_filter(d, env) ||
+	    !configuration_parse_parser(d, env) ||
 	    !configuration_parse_whitelist(d, &env->whitelist, &env->num_whitelist))
 		goto out;
 

@@ -23,9 +23,13 @@
 #include <iniparser.h>
 
 #include <ensc-lib/xalloc.h>
+#include <ensc-lib/iniparser.h>
 
 #include "logging.h"
 #include "failban.h"
+#include "util.h"
+
+#define DEBUG_CATEGORY	14
 
 static void read_boolean(bool *b, dictionary *dict, char const *key)
 {
@@ -53,6 +57,33 @@ bool configuration_parse_filter(dictionary *dict,
 	read_boolean(&env->filter.manage, dict, "filter:manage");
 
 	env->filter._memallocated = true;
+
+	return true;
+}
+
+bool configuration_parse_parser(dictionary *dict,
+				struct environment *env)
+{
+	if (getuid() != 0 ||
+	    !iniparser_getboolean(dict, "parser:force", true)) {
+		lwarn("running as unprivileged user; disabling process isolation");
+
+		env->parser.chroot = NULL;
+		env->parser.uid = -1;
+		env->parser.gid = -1;
+
+		return true;
+	}
+
+	read_string(&env->parser.chroot, dict, "parser:chroot");
+
+	if (!iniparser_getuser(dict, &env->parser.uid, &env->parser.gid,
+			       "parser:user", false) ||
+	    !iniparser_getgroup(dict, &env->parser.gid,
+				"parser:group", false)) {
+		lerr("failed to read parser:user or parser:group");
+		return false;
+	}
 
 	return true;
 }
