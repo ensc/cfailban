@@ -1,0 +1,25 @@
+* cfailban
+
+** What is ``cfailban''?
+
+cfailban reads input from various sources (typically syslog output),
+checks it against user-defined regular expressions and adds iptables
+entries for matches.
+
+It can be used to block brute-force attacks which are trying e.g. to
+login via SSH.
+
+
+** License
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, version 3 of the License.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <http://www.gnu.org/licenses/>.
