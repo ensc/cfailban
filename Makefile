@@ -54,11 +54,13 @@ cfailban_SOURCES = \
 	src/source-generic.h \
 	src/source.c \
 	src/source.h \
+	src/util.h \
 	ensc-lib/compiler-gcc.h \
 	ensc-lib/compiler-lint.h \
 	ensc-lib/compiler.h \
 	ensc-lib/iniparser-pwdb.c \
 	ensc-lib/iniparser.h \
+	ensc-lib/i18n.h \
 	ensc-lib/io.c \
 	ensc-lib/io.h \
 	ensc-lib/list.h \
@@ -99,6 +101,8 @@ BUILT_SOURCES = \
 	src/failban-cmdline.h \
 
 ALL_SOURCES = \
+	COPYING \
+	README.org \
 	Makefile \
 	cfailban.conf \
 	${cfailban_SOURCES} \
