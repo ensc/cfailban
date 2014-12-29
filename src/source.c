@@ -362,6 +362,12 @@ static bool drop_perm(struct environment *env)
 		ctx->can_reopen = false;
 	}
 
+	rc = chdir("/");
+	if (rc < 0) {
+		lerr("chdir(/): %m");
+		goto out;
+	}
+
 	if (env->parser.gid != (gid_t)(-1)) {
 		gid_t	gid =env->parser.gid;
 
