@@ -26,6 +26,7 @@
 #include <ensc-lib/safe_calloc.h>
 
 #include "configuration.h"
+#include "iniparser-legacy.h"
 
 #include "rules.h"
 #include "failban.h"

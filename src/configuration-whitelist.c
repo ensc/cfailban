@@ -27,6 +27,7 @@
 #include <ensc-lib/xalloc.h>
 #include <ensc-lib/safe_calloc.h>
 
+#include "iniparser-legacy.h"
 #include "rules.h"
 #include "logging.h"
 
