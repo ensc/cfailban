@@ -1,6 +1,4 @@
-* cfailban
-
-** What is ``cfailban''?
+* What is ``cfailban''?
 
 cfailban reads input from various sources (typically syslog output),
 checks it against user-defined regular expressions and adds iptables
@@ -9,8 +7,224 @@ entries for matches.
 It can be used to block brute-force attacks which are trying e.g. to
 login via SSH.
 
+It features:
 
-** License
+- IPv4 and IPv6 netfilter support
+
+- customizable expiration of netfilter entries which are blocking IPs
+
+- customizable trigger rates
+
+- integrated tests to verify regular expressions
+
+- reading input from multiple sources (FIFOs and sockets)
+
+- a customizable whitelist
+
+
+* Quickstart
+
+** Requirements:
+
+- iniparser
+
+- GNU gengetopt (only build time dependency)
+
+- a recent Linux system (e.g. RHEL6 is supported, RHEL5 not)
+
+
+** Compilation + Installation
+
+#+BEGIN_SRC sh
+$ make
+$ make install [DESTDIR=<dir>]
+#+END_SRC
+
+You might want to set =prefix=, =sbindir= or =sysconfdir= makefile
+variables too.  For older compilers which do not understand =-flto=
+flags, you can override them by
+
+#+BEGIN_SRC sh
+$ make C_FLTO= LD_FLTO=
+#+END_SRC
+
+
+** Configuration file
+
+Look into the source tarbal for a sample configuration file =cfailban.conf=
+and adapt it to your needs. For future steps, we assume a file like
+
+#+BEGIN_SRC
+[defaults]
+rate = 1/min
+burst = 10
+duration = 300
+
+[filter]
+ip4tables_prog = /usr/sbin/iptables
+ip6tables_prog = /usr/sbin/ip6tables
+chain = chk-BANNED
+target = BANNED
+manage = true
+
+[whitelist]
+local0 = 127.0.0.1/8
+local1 = 192.168.0.0/16
+
+[source/udpsink]
+type = socket
+stype = udp
+host = 127.0.0.1
+port = 530
+
+[rule/test1]
+pattern4 = "ip=@HOST@"
+resolve4 = true
+ban4 = 1
+#+END_SRC
+
+** netfilter setup
+
+You have to create both the =filter:chain= (``chk-BANNED'') and
+=filter:target= (``BANNED'') chains in your local netfilter setup.
+The =filter:chain= should be called very early and for existing
+connections too, so top of =INPUT= would be a suitable place.
+
+The =filter:target= rule is for rejecting the packets and you might
+want to do some logging there too.
+
+#+BEGIN_SRC
+iptables -N chk-BANNED
+iptables -I INPUT 1 -j chk-BANNED
+iptables -N BANNED
+iptables -A BANNED -j LOG
+iptables -A BANNED -j DROP
+#+END_SRC
+
+While testing, you might want to omit the =-I INPUT= setup to avoid
+locking out yourself.
+
+
+** syslog setup
+
+*** syslog-ng
+
+#+BEGIN_SRC
+destination d_cfailban {
+  udp("127.0.0.1" port(530));
+};
+
+filter f_cfailban {
+  (program("sshd") and 
+   message("(authentication failure)|([iI]nvalid user)"));
+};
+
+log { source(localhost); filter(f_cfailban);  destination(d_cfailban); };
+#+END_SRC
+
+
+** testing it
+
+Start program as root by
+
+#+BEGIN_SRC
+# cfailban -c failban.conf --debug
+#+END_SRC
+
+
+Repeat
+
+#+BEGIN_SRC
+$ printf 'ip=www.google.de\n' | nc -u 127.0.0.1 530
+#+END_SRC
+
+multiple times.
+
+
+* The configuration file
+
+** TODO The =defaults= section
+
+** TODO The =parser= section
+
+** The =filter= section
+
+This section defines various parameters of the netfilter code:
+
+- the paths of the =iptables= program (=filter:ip4tables= and
+  =filter:ip6tables=)
+
+- the iptables chain (=filter:chain= -> ``chk-BANNED'') where
+  rules will be created
+
+- the iptables target (=filter:target= -> ``BANNED'') which must be
+  another chain
+
+- whether the chain will be managed by us; when it is managed, it will
+  be flushed both on starting and leaving the program
+
+Blocking an ip address means to execute
+
+#+BEGIN_SRC sh
+/usr/sbin/iptables -A chk-BANNED -s <ip> -g BANNED \
+  -m comment --coment <rule-name>
+#+END_SRC
+
+** TODO The =whitelist= section
+
+** TODO The =source= sections
+
+*** TODO FIFO sources
+
+*** TODO Socket sources
+
+** The =rule= sections
+
+There can be multiple sections having the format =rule/<name>=.  The
+=<name>= part specifies an unique name for the rule which is e.g. used
+as the comment in the netfilter rule later.
+
+The following options are supported:
+
+- =pattern= :: an extended regular expression which must contain a match
+  group specifying the ip address; this option tries to autodetect the
+  ip family (IPv4 or IPv6)
+- =pattern4= :: same like =pattern= but assumes IPv4
+- =pattern6= :: same like =pattern= but assumes IPv6
+
+- =ban= :: the match group index in =pattern= which specifies the
+  ip address
+- =ban4= :: the match group index in =pattern4= which specifies
+  the ip address
+- =ban6= :: the match group index in =pattern6= which specifies
+  the ip address
+
+- =resolve= :: a boolean flag; when set, it is tried to resolve the
+  result from =pattern= by DNS when it is non-numeric; see warning
+  below...
+- =resolve4= :: like =resolve=, but applies to =pattern4= and
+  =ban4=
+- =resolve6= :: like =resolve=, but applies to =pattern6= and
+  =ban6=
+
+- =rate= :: a string of the format =<number>/<time-unit>=; this
+  setting means, that an internal counter will be incremented by
+  =<number>= every =<time-unit>=.  On the other site, this counter
+  will be decremented when seeing a corresponding syslog entry and
+  the ip will be blocked when the counter reaches zero.
+- =burst= :: an absolute integer value which specifies the initial and
+  maximal value of the internal counter
+- =duration= :: number of seconds which must pass to unblock an ip
+  address
+
+*NOTE:* you can specify all three pattern types (auto, IPv4 and IPv6)
+in one rule
+
+*WARNING:* enabling =resolve= can slow down parsing of log entries
+significantly and might be used to attack the failban solution. It is
+recommended to use numeric ip addresses wherever possible.
+
+* License
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
