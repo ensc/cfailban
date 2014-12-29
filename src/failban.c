@@ -307,7 +307,6 @@ out:
 	return rc >= 0;
 }
 
-
 static int create_signalfd(void)
 {
 	sigset_t	mask;
