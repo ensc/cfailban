@@ -43,9 +43,7 @@ static bool wait_for_iptables(int pid)
 
 again:
 	rc = waitpid(pid, &status, 0);
-	if (rc == pid &&
-	    WIFEXITED(status) == 0 &&
-	    WEXITSTATUS(status) == 0) {
+	if (rc == pid && WIFEXITED(status) && WEXITSTATUS(status) == 0) {
 		rc = 0;
 	} else if (rc == pid) {
 		lwarn("child exited with %04x", status);
