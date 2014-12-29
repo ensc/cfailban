@@ -295,6 +295,7 @@ bool subprocess_block_signals(void)
 	sigemptyset(&mask);
 	sigaddset(&mask, SIGINT);
 	sigaddset(&mask, SIGQUIT);
+	sigaddset(&mask, SIGPIPE);
 
 	rc = sigprocmask(SIG_BLOCK, &mask, NULL);
 	if (rc < 0) {
