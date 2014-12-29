@@ -27,7 +27,7 @@ extra_CPPFLAGS := \
 
 AM_CPPFLAGS += ${extra_CPPFLAGS}
 
-bin_PROGRAMS = cfailban
+sbin_PROGRAMS = cfailban
 
 test_PROGRAMS = testsuite/source-fifo
 test_SCRIPTS = testsuite/run_source-fifo
@@ -114,7 +114,7 @@ SED_CMD = \
 
 #################################
 
-all:	$(bin_PROGRAMS) $(test_PROGRAMS)
+all:	$(sbin_PROGRAMS) $(test_PROGRAMS)
 
 cfailban:	${cfailban_SOURCES} ${cfailban_OBJECTS}
 	$(CC) $(call _buildflags,C) $(filter %.c %.o,$^) -o $@ $($@_LIBS)
@@ -144,7 +144,8 @@ src/%.ggo:	src/%.ggo.in | src/.dirstamp
 
 clean:
 	rm -f .*stamp */.*stamp *.o */*.o
-	rm -f ${BUILT_SOURCES} ${bin_PROGRAMS} ${test_PROGRAMS}
+	rm -f ${BUILT_SOURCES} ${sbin_PROGRAMS} ${test_PROGRAMS}
 
 $(eval $(call _distrule,.xz,${ALL_SOURCES}))
 $(eval $(call _checkrules,${ALL_SOURCES}))
+$(eval $(call _installrule,sbin))
