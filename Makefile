@@ -141,5 +141,5 @@ clean:
 	rm -f .*stamp */.*stamp *.o */*.o
 	rm -f ${BUILT_SOURCES} ${bin_PROGRAMS} ${test_PROGRAMS}
 
-$(eval $(call _distrule,${ALL_SOURCES}))
+$(eval $(call _distrule,.xz,${ALL_SOURCES}))
 $(eval $(call _checkrules,${ALL_SOURCES}))
