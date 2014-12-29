@@ -40,6 +40,12 @@
 
 #define DEBUG_CATEGORY	4
 
+#ifndef NO_CLOCK_BOOTTIME
+#  define FAILBAN_CLOCK		CLOCK_BOOTTIME
+#else
+#  define FAILBAN_CLOCK		CLOCK_MONOTONIC
+#endif
+
 struct parser_context {
 	struct list_head	blocked_items;
 	struct subprocess	*proc;
@@ -137,7 +143,7 @@ static void sources_handle_line(struct environment *env,
 
 	ldbg("handle line '%.*s'", (int)str->len, str->b);
 
-	clock_gettime(CLOCK_BOOTTIME, &now);
+	clock_gettime(FAILBAN_CLOCK, &now);
 
 	list_foreach_entry(rule, &env->rules, head) {
 		struct trigger		*trigger;
@@ -241,7 +247,7 @@ static void sources_gc(struct environment *env, int timer_fd)
 	struct trigger		*tmp;
 	struct timespec const	*next_tm = NULL;
 
-	clock_gettime(CLOCK_BOOTTIME, &now);
+	clock_gettime(FAILBAN_CLOCK, &now);
 
 	list_foreach_entry_save(trigger, tmp, &ctx->blocked_items, head) {
 		char		ipbuf[INET6_ADDRSTRLEN];
@@ -444,7 +450,7 @@ void sources_run(struct subprocess *proc, struct environment *env)
 		[HDL_TIMER] = {
 			.fn	= sources_handle_timer,
 			.env	= env,
-			.fd	= timerfd_create(CLOCK_BOOTTIME,
+			.fd	= timerfd_create(FAILBAN_CLOCK,
 						 TFD_CLOEXEC | TFD_NONBLOCK),
 		},
 	};

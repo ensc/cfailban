@@ -22,6 +22,7 @@ CFLAGS = -Wall -W -Werror -Wno-unused-parameter -Wmissing-prototypes -Wshadow -O
 
 extra_CPPFLAGS := \
 	$(call _find_symbol,iniparser_getsecnkeys,\#include <iniparser.h>) \
+	$(call _find_symbol,CLOCK_BOOTTIME,\#include <time.h>)
 
 AM_CPPFLAGS += ${extra_CPPFLAGS}
 
