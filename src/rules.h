@@ -29,6 +29,7 @@ struct match {
 	sa_family_t		family;
 	regex_t			expr;
 	unsigned int		idx;
+	bool			do_resolve;
 };
 
 struct rule {

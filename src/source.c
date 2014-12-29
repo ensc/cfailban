@@ -429,6 +429,10 @@ out:
 	return fd;
 }
 
+static void sigalarm_handler(int sig)
+{
+}
+
 void sources_run(struct subprocess *proc, struct environment *env)
 {
 	enum {
@@ -467,6 +471,8 @@ void sources_run(struct subprocess *proc, struct environment *env)
 		lerr("timerfd_create(): %m");
 		goto out;
 	}
+
+	signal(SIGALRM, sigalarm_handler);
 
 	if (!open_sources(env, &num_sources, &source_handlers, &buf))
 		goto out;

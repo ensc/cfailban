@@ -23,6 +23,8 @@
 #include <string.h>
 #include <stdlib.h>
 #include <search.h>
+#include <netdb.h>
+#include <sys/time.h>
 
 #include <ensc-lib/safe_calloc.h>
 #include <ensc-lib/xalloc.h>
@@ -181,6 +183,118 @@ void rule_free(struct rule *rule)
 	free(rule);
 }
 
+static bool match_lookup(struct trigger_ip *ip,
+			 struct match const *match,
+			 char *str)
+{
+	int		rc;
+
+	/* try to resolve it with cheap functions first */
+	switch (match->family) {
+	case AF_UNSPEC:
+		ip->family = AF_INET;
+		rc = inet_pton(ip->family, str, &ip->ip.ip4);
+		if (rc < 1) {
+			ip->family = AF_INET6;
+			rc = inet_pton(ip->family, str, &ip->ip.ip6);
+		}
+
+		break;
+
+	case AF_INET:
+	case AF_INET6:
+		ip->family = match->family;
+		rc = inet_pton(ip->family, str, &ip->ip.buf);
+		break;
+
+	default:
+		BUG();
+	}
+
+	if (rc < 1 && match->do_resolve) {
+		struct addrinfo	const	hint = {
+			.ai_family	= match->family,
+			/* request TCP addresses only to prevent duplicate
+			 * results */
+			.ai_socktype	= SOCK_STREAM,
+			.ai_protocol	= 6,
+		};
+		struct addrinfo		*result;
+		struct itimerval	itimer = {
+			.it_value = {
+				.tv_sec		= 1,
+				.tv_usec	= 500000,
+			},
+		};
+		size_t			l = strlen(str);
+
+		/* append a '.' to prevent iterating the DNS search list;
+		 * caller has to ensure that buffer is large enough */
+		if (l > 0 && str[l-1] != '.')
+			strcpy(str + l, ".");
+
+		rc = setitimer(ITIMER_REAL, &itimer, NULL);
+		if (rc < 0) {
+			lerr("setitimer(): %m");
+			goto out;
+		}
+		rc = getaddrinfo(str, NULL, &hint, &result);
+
+		/* stop timer; TODO: read error? */
+		memset(&itimer, 0, sizeof itimer);
+		setitimer(ITIMER_REAL, &itimer, NULL);
+		
+		if (rc) {
+			lerr("getaddrinfo(%s): %s", str, gai_strerror(rc));
+			result = NULL;
+		} else if (!result) {
+			lwarn("getaddrinfo(%s) returned no result", str);
+			rc = -1;
+		} else if (result->ai_next) {
+			lwarn("getaddrinfo(%s) returned multiple results", str);
+			rc = -1;
+		} else {
+			union {
+				struct sockaddr_storage		storage;
+				struct sockaddr			generic;
+				struct sockaddr_in		ip4;
+				struct sockaddr_in6		ip6;
+			} const			*addr;
+
+			addr = (void const *)result->ai_addr;
+
+			ip->family = result->ai_family;
+
+			switch (ip->family) {
+			case AF_INET:
+				ip->ip.ip4 = addr->ip4.sin_addr;
+				break;
+
+			case AF_INET6:
+				ip->ip.ip6 = addr->ip6.sin6_addr;
+				break;
+
+			default:
+				BUG();
+			}
+
+			rc = 1;
+		}
+
+		freeaddrinfo(result);
+	}
+
+	if (rc > 0) {
+		switch (ip->family) {
+		case AF_INET:	ip->len = 32/8; break;
+		case AF_INET6:	ip->len = 128/8; break;
+		default:	BUG();
+		}
+	}
+
+out:
+	return rc > 0;
+}
 
 bool match_check(struct trigger_ip *ip,
 		 struct match const *match, char const *str)
@@ -188,6 +302,7 @@ bool match_check(struct trigger_ip *ip,
 	regoff_t		rm_eo;
 	regoff_t		rm_so;
 	int			rc;
+	/* RFC 1035 specifies a DNS name limit of 256 chars */
 	char			ip_buf[256 + 16 + 64];
 	regmatch_t		cur_matches[match->idx + 1];
 
@@ -209,7 +324,8 @@ bool match_check(struct trigger_ip *ip,
 
 	BUG_ON(rm_eo < rm_so);
 
-	if ((size_t)(rm_eo - rm_so) >= sizeof ip_buf - 1u) {
+	/* reserve space for for trailing '\0' and perhaps a '.' */
+	if ((size_t)(rm_eo - rm_so) >= sizeof ip_buf - 2u) {
 		lerr("match '%.*s' in '%s' exceeds internal buffers",
 		     (int)(rm_eo - rm_so), str + rm_so, str);
 		return false;
@@ -222,38 +338,11 @@ bool match_check(struct trigger_ip *ip,
 
 	memset(ip, 0, sizeof *ip);
 
-	switch (match->family) {
-	case AF_UNSPEC:
-		ip->family = AF_INET;
-		rc = inet_pton(ip->family, ip_buf, &ip->ip.ip4);
-
-		if (rc < 1) {
-			ip->family = AF_INET6;
-			rc = inet_pton(ip->family, ip_buf, &ip->ip.ip6);
-		}
-
-		break;
-
-	case AF_INET:
-	case AF_INET6:
-		ip->family = match->family;
-		rc = inet_pton(ip->family, ip_buf, &ip->ip.buf);
-		break;
-
-	default:
-		BUG();
-	}
-
-	if (rc < 1) {
+	rc = match_lookup(ip, match, ip_buf) ? 0 : -1;
+	if (rc < 0) {
 		lwarn("failed to convert '%s' into ip (%d family)",
 		      ip_buf, match->family);
 		return false;
-	}
-
-	switch (ip->family) {
-	case AF_INET:	ip->len = 32/8; break;
-	case AF_INET6:	ip->len = 128/8; break;
-	default:	BUG();
 	}
 
 	return true;

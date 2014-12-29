@@ -63,6 +63,7 @@ char const *configuration_lookup_placeholder(char const *str, size_t len)
 {
 #define PATTERN_IP4	"([0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3})"
 #define PATTERN_IP6	"([0-9a-fA-F:]*:([0-9a-fA-F:]*)" PATTERN_IP4 "?)"
+#define PATTERN_HOST	"([0-9a-zA-Z.]+\\.[0-9a-zA-Z.]+)"
 
 	if (xstrneq(str, len, "IP4"))
 		return PATTERN_IP4;
@@ -70,9 +71,16 @@ char const *configuration_lookup_placeholder(char const *str, size_t len)
 		return PATTERN_IP6;
 	else if (xstrneq(str, len, "IP"))
 		return "(" PATTERN_IP4 "|" PATTERN_IP6 ")";
+	else if (xstrneq(str, len, "HOST"))
+		return "(" PATTERN_IP4 "|" PATTERN_IP6 "|" PATTERN_HOST ")";
+	else if (xstrneq(str, len, "HOST_IP4"))
+		return "(" PATTERN_IP4 "|" PATTERN_HOST ")";
+	else if (xstrneq(str, len, "HOST_IP6"))
+		return "(" PATTERN_IP6 "|" PATTERN_HOST ")";
 	else
 		return NULL;
 
+#undef PATTERN_HOST
 #undef PATTERN_IP6
 #undef PATTERN_IP4
 }

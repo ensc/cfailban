@@ -38,6 +38,7 @@ struct raw_match {
 	sa_family_t		family;
 	char const		*pattern;
 	unsigned int		idx;
+	bool			do_resolve;
 };
 
 static bool parse_match(struct raw_match *match, dictionary *dict,
@@ -47,6 +48,7 @@ static bool parse_match(struct raw_match *match, dictionary *dict,
 	size_t	l = strlen(base);
 	int	idx;
 
+	/* read '$rule:pattern' string */
 	strcpy(base + l, "pattern");
 	strcat(base + l, suffix);
 
@@ -56,6 +58,13 @@ static bool parse_match(struct raw_match *match, dictionary *dict,
 		return false;
 	}
 
+	/* read $rule:resolve flag */
+	strcpy(base + l, "resolve");
+	strcat(base + l, suffix);
+
+	match->do_resolve = iniparser_getboolean(dict, base, false);
+
+	/* read '$rule:ban' index */
 	strcpy(base + l, "ban");
 	strcat(base + l, suffix);
 
@@ -65,6 +74,7 @@ static bool parse_match(struct raw_match *match, dictionary *dict,
 		return false;
 	}
 	match->idx = idx;
+
 	match->family = sa_family;
 
 	ltrace("match=%p[%d, %s, %u]", match, match->family,
@@ -143,6 +153,7 @@ static bool copy_match(struct match *dst, struct raw_match const *src)
 	}
 
 	dst->idx = src->idx;
+	dst->do_resolve = src->do_resolve;
 	dst->family = src->family;
 
 	rc = 0;
