@@ -13,12 +13,17 @@ AM_CPPFLAGS = \
 	-D _GNU_SOURCE -D CONFIG_DYNAMIC_DEBUG_LEVEL
 
 AM_CFLAGS = \
-	-std=gnu11  ${C_FLTO}
+	-std=gnu99 ${C_FLTO}
 
 AM_LDFLAGS = \
 	${LD_FLTO}
 
 CFLAGS = -Wall -W -Werror -Wno-unused-parameter -Wmissing-prototypes -Wshadow -O1 -g3
+
+extra_CPPFLAGS := \
+	$(call _find_symbol,iniparser_getsecnkeys,\#include <iniparser.h>) \
+
+AM_CPPFLAGS += ${extra_CPPFLAGS}
 
 bin_PROGRAMS = cfailban
 
@@ -36,6 +41,8 @@ cfailban_SOURCES = \
 	src/failban.ggo.in \
 	src/failban.h \
 	src/filter.c \
+	src/iniparser-legacy.c \
+	src/iniparser-legacy.h \
 	src/logging.h \
 	src/rules.c \
 	src/rules.h \
@@ -65,7 +72,8 @@ cfailban_OBJECTS = \
 
 cfailban_LIBS = \
 	-liniparser \
-	-lcom_err
+	-lcom_err \
+	-lrt
 
 CFLAGS_src/failban-cmdline.o = -Wno-unused-but-set-variable
 
