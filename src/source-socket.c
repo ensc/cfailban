@@ -213,7 +213,7 @@ static bool source_socket_open(struct source *src)
 		struct sockaddr_in	ip4;
 		struct sockaddr_in6	ip6;
 	}				addr;
-	socklen_t			addr_len;
+	socklen_t			addr_len = addr_len;
 
 
 	fd_epoll = epoll_create1(EPOLL_CLOEXEC);
