@@ -293,7 +293,10 @@ static bool sources_handle_timer(struct epoll_handler *h,
 
 	ltrace("h=%p, fd=%d, events=%04x", h, epollfd, events);
 
-	(void)read(h->fd, &tmp, sizeof tmp);
+	if (read(h->fd, &tmp, sizeof tmp) < 0) {
+		/* noop; this branch is to avoid -Wunused-result warnings */
+	}
+		
 	sources_gc(h->env, h->fd);
 
 	return true;
