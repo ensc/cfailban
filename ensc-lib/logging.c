@@ -101,7 +101,9 @@ void _log_msg(unsigned int lvl, unsigned int domain,
 	if ((lvl & L_POP))
 		_log_pop();
 
-	lockf(_log_fd, F_LOCK, 0);
+	if (lockf(_log_fd, F_LOCK, 0) < 0) {
+		/* noop; this branch is to avoid -Wunused-result warnings */
+	}
 
 	if (!(lvl & L_NOTM)) {
 		char	fn_buf[128];
@@ -142,7 +144,9 @@ void _log_msg(unsigned int lvl, unsigned int domain,
 	if (!(lvl & L_NONL))
 		dprintf(_log_fd, "\n");
 
-	lockf(_log_fd, F_ULOCK, 0);
+	if (lockf(_log_fd, F_ULOCK, 0) < 0) {
+		/* noop; this branch is to avoid -Wunused-result warnings */
+	}
 
 	if ((lvl & L_PUSH))
 		_log_push();
