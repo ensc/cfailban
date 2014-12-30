@@ -19,7 +19,8 @@ AM_LDFLAGS = \
 	-Wl,-as-needed \
 	${LD_FLTO}
 
-CFLAGS = -Wall -W -Werror -Wno-unused-parameter -Wmissing-prototypes -Wshadow -O1 -g3
+CFLAGS = -Wall -W -Werror -Wno-unused-parameter -Wmissing-prototypes -Wshadow \
+	-O1 -g3 -D_FORTIFY_SOURCE=2
 
 extra_CPPFLAGS := \
 	$(call _find_symbol,iniparser_getsecnkeys,\#include <iniparser.h>) \
