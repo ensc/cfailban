@@ -122,6 +122,12 @@ filter f_cfailban {
 log { source(localhost); filter(f_cfailban);  destination(d_cfailban); };
 #+END_SRC
 
+*** rsyslog
+
+#+BEGIN_SRC
+$template cfailbanfmt,"%msg%\n"
+:programname, isequal, "sshd"	@127.0.0.1:530;cfailbanfmt
+#+END_SRC
 
 ** testing it
 
