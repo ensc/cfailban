@@ -40,12 +40,6 @@
 
 #define DEBUG_CATEGORY	4
 
-#ifndef NO_CLOCK_BOOTTIME
-#  define FAILBAN_CLOCK		CLOCK_BOOTTIME
-#else
-#  define FAILBAN_CLOCK		CLOCK_MONOTONIC
-#endif
-
 struct parser_context {
 	struct list_head	blocked_items;
 	struct subprocess	*proc;
@@ -64,6 +58,65 @@ struct source_handler {
 	struct source		*s;
 	struct strbuf		*buf;
 };
+
+static int xclock_gettime(struct timespec *tp)
+{
+	int		rc = -1;
+#ifdef NO_CLOCK_BOOTTIME
+	int const	have_clock_boottime = 0;
+#else
+	/* autodetect support of CLOCK_BOOTTIME at runtime */
+	static int	have_clock_boottime = -1;
+#endif
+
+#ifndef NO_CLOCK_BOOTTIME
+	if (have_clock_boottime != 0) {
+		/* supported since 2.6.39 */
+		rc = clock_gettime(CLOCK_BOOTTIME, tp);
+		if (have_clock_boottime != -1)
+			;		/* noop */
+		else if (rc < 0 && errno == EINVAL)
+			have_clock_boottime = 0;
+		else
+			have_clock_boottime = 1;
+	}
+#endif
+
+	if (have_clock_boottime == 0)
+		rc = clock_gettime(CLOCK_MONOTONIC, tp);
+
+	return rc;
+}
+
+static int xtimerfd_create(int flags)
+{
+	int		fd = -1;
+#ifdef NO_CLOCK_BOOTTIME
+	int const	have_clock_boottime = 0;
+#else
+	/* autodetect support of CLOCK_BOOTTIME at runtime */
+	static int	have_clock_boottime = -1;
+#endif
+
+#ifndef NO_CLOCK_BOOTTIME
+	if (have_clock_boottime != 0) {
+		/* supported since 3.14 */
+		fd = timerfd_create(CLOCK_BOOTTIME, flags);
+		if (have_clock_boottime != -1)
+			;		/* noop */
+		else if (fd < 0 && errno == EINVAL)
+			have_clock_boottime = 0;
+		else
+			have_clock_boottime = 1;
+	}
+#endif
+
+	if (have_clock_boottime == 0)
+		fd = timerfd_create(CLOCK_MONOTONIC, flags);
+
+	return fd;
+}
+
 
 static bool sources_register_source(int epollfd, struct source_handler *hdl)
 {
@@ -148,7 +201,7 @@ static void sources_handle_line(struct environment *env,
 
 	ldbg("handle line '%.*s'", (int)str->len, str->b);
 
-	clock_gettime(FAILBAN_CLOCK, &now);
+	xclock_gettime(&now);
 
 	list_foreach_entry(rule, &env->rules, head) {
 		struct trigger		*trigger;
@@ -252,7 +305,7 @@ static void sources_gc(struct environment *env, int timer_fd)
 	struct trigger		*tmp;
 	struct timespec const	*next_tm = NULL;
 
-	clock_gettime(FAILBAN_CLOCK, &now);
+	xclock_gettime(&now);
 
 	list_foreach_entry_save(trigger, tmp, &ctx->blocked_items, head) {
 		char		ipbuf[INET6_ADDRSTRLEN];
@@ -469,8 +522,7 @@ void sources_run(struct subprocess *proc, struct environment *env)
 		[HDL_TIMER] = {
 			.fn	= sources_handle_timer,
 			.env	= env,
-			.fd	= timerfd_create(FAILBAN_CLOCK,
-						 TFD_CLOEXEC | TFD_NONBLOCK),
+			.fd	= xtimerfd_create(TFD_CLOEXEC | TFD_NONBLOCK),
 		},
 	};
 	struct parser_context		ctx = {
