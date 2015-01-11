@@ -349,7 +349,7 @@ static bool sources_handle_timer(struct epoll_handler *h,
 	if (read(h->fd, &tmp, sizeof tmp) < 0) {
 		/* noop; this branch is to avoid -Wunused-result warnings */
 	}
-		
+
 	sources_gc(h->env, h->fd);
 
 	return true;
