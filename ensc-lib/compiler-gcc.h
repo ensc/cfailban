@@ -31,6 +31,7 @@
 #define _const_			__attribute__((__const__))
 #define _pure_			__attribute__((__pure__))
 #define _hidden_		__attribute__((__visibility__("hidden")))
+#define _malloc_		__attribute__((__malloc__))
 
 #if defined __arm__
 #  define __die_code0(_code) __asm__ __volatile__ (".byte 0xff,0xff,0xff,0xff")

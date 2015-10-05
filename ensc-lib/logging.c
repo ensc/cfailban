@@ -26,6 +26,11 @@
 
 #include "compiler.h"
 
+#ifdef __dietlibc__
+#  define dprintf(fd, ...)	fdprintf(fd, ## __VA_ARGS__)
+#  define vdprintf(fd, ...)	vfdprintf(fd, ## __VA_ARGS__)
+#endif
+
 enum {
 	L_COLOR_NONE	= 0,
 	L_COLOR_DATE	= (1 << L_START_FLAGS),

@@ -35,7 +35,7 @@ LD_FLTO = -fuse-linker-plugin ${C_FLTO}
 
 srcdir ?= $(dir $(firstword $(MAKEFILE_LIST)))
 abs_top_builddir = $(abspath ./)
-abs_top_srcdir ?= $(dir $(abspath ${srcdir}))
+abs_top_srcdir ?= $(abspath ${srcdir})
 
 _createtarball = $(TAR) cf $1 $(TARFLAGS) $(if $2,-P --transform='s!^(($(abs_top_srcdir))|($(abs_top_builddir)/?))?!$2/!x') $3
 _buildflags = $(foreach k,CPP $1 LD, $(AM_$2$kFLAGS) $($2$kFLAGS) $($kFLAGS_$@))
@@ -206,8 +206,11 @@ _check_rule = \
 
 ##
 
+_check_cc_flags = \
+	$$(filter-out -Werror,$$(call _buildflags,$$1))
+
 _check_exec_cc = \
-	$$(CC) $$(call _buildflags,C) -o /dev/null -c $$1
+	$$(CC) $$(call _check_cc_flags,C) -o /dev/null -c $$1
 
 .check-syntax-cc_ALL:		$${CHK_SOURCES}
 	$$(call _check_exec_cc,$$^)
@@ -250,3 +253,38 @@ $$(call _check_rule,cppcheck):	%
 endef
 
 ################
+
+%/.dirstamp:
+	${MKDIR_P} -p '${@D}'
+	@touch '$@'
+
+################
+
+## Usage: $(call build_ggo,<basename>)
+define build_ggo
+$1-cmdline.o:	$1-cmdline.c $1-cmdline.h
+	$$(CC) $${CFLAGS_GENGETOPT} $$(call _buildflags,C) $$(filter %.c,$$^) -c -o $$@
+
+$1-cmdline.c $1-cmdline.h:	$$(dir $1).$$(notdir $1)-cmdline.stamp
+
+$1.ggo:	$1.ggo.in | $$(dir $1).dirstamp
+
+clean:	_clean-ggo-$1
+
+_clean-ggo-$1:
+	rm -f $1-cmdline.c $1-cmdline.h $1-cmdline.o $1.ggo
+	rm -f $$(dir $1).dirstamp $$(dir $1).$$(notdir $1)-cmdline.stamp
+	rmdir $$(dir $1) 2>/dev/null || :
+endef
+
+CFLAGS_GENGETOPT = -I . -Wno-unused-but-set-variable
+
+.%-cmdline.stamp:	%.ggo
+	$(GENGETOPT) -i $< -F $*-cmdline
+	@touch $@
+
+%.ggo:	%.ggo.in
+	-rm -f $@ $@.tmp
+	$(SED) $(SED_CMD) $< >$@.tmp </dev/null
+	chmod a-w $@.tmp
+	mv $@.tmp $@

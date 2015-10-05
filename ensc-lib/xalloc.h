@@ -22,7 +22,7 @@
 _noreturn_
 void alloc_error(char const *, char const *, unsigned int, char const *);
 
-#define _alloc_fn(_type, _fn, ...)					\
+#define _alloc_fn(_type, _fn, ...) __extension__			\
 	 ({								\
 		 _type	_tmp = _fn(__VA_ARGS__);			\
 		 if (unlikely(_tmp == NULL))				\
@@ -36,7 +36,8 @@ void alloc_error(char const *, char const *, unsigned int, char const *);
 #define Xstrndup(_str, _sz)	_alloc_fn(char *, strndup, _str, _sz)
 #define Xstrdup(_str)		_alloc_fn(char *, strdup, _str)
 
-#define freec(_c) ({ void const *_tmp = (_c); free((void *)_tmp); })
+#define freec(_c) __extension__ \
+	({ void const *_tmp = (_c); free((void *)_tmp); })
 
 #define Xrecalloc(_ptr,_n,_sz)	_alloc_fn(void *, recalloc, _ptr, _n, _sz)
 
