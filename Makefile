@@ -124,29 +124,11 @@ testsuite/source-fifo:	${testsuite/source-fifo_SOURCES} ${testsuite/source-fifo_
 	| testsuite/.dirstamp
 	$(CC) $(call _buildflags,C) $(filter %.c %.o,$^) -o $@ $($@_LIBS)
 
-src/failban-cmdline.o:	src/failban-cmdline.c src/failban-cmdline.h
-	$(CC) $(call _buildflags,C) $(filter %.c,$^) -c -o $@
-
-src/failban-cmdline.c src/failban-cmdline.h:	src/.failban-cmdline.stamp
-
-src/.%-cmdline.stamp:	src/%.ggo | src/.dirstamp
-	$(GENGETOPT) -i $< -F ${@D}/$*-cmdline
-	@touch $@
-
-src/%.ggo:	src/%.ggo.in | src/.dirstamp
-	-rm -f $@ $@.tmp
-	$(SED) $(SED_CMD) $< >$@.tmp
-	chmod a-w $@.tmp
-	mv $@.tmp $@
-
-%/.dirstamp:
-	mkdir -p ${@D}
-	@touch $@
-
 clean:
 	rm -f .*stamp */.*stamp *.o */*.o
 	rm -f ${BUILT_SOURCES} ${sbin_PROGRAMS} ${test_PROGRAMS}
 
+$(eval $(call build_ggo,src/failban))
 $(eval $(call _distrule,.xz,${ALL_SOURCES}))
 $(eval $(call _checkrules,${ALL_SOURCES}))
 $(eval $(call _installrule,sbin))
