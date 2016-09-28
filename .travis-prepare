@@ -1,0 +1,14 @@
+#! /bin/bash
+
+D=$1
+
+set -e
+set -x
+
+git clone -b v3.2 https://github.com/ndevilla/iniparser.git
+make -C iniparser
+
+mkdir "$D"
+
+install -p -m 0644 iniparser/src/*.h        "$D/"
+install -p -m 0755 iniparser/libiniparser.* "$D/"

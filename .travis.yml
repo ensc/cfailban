@@ -1,0 +1,31 @@
+language: c
+dist: trusty
+
+env:
+  global:
+    # The next declaration is the encrypted COVERITY_SCAN_TOKEN, created
+    #   via the "travis encrypt" command using the project repo's public key
+    - secure: "P69pZ/biaY1zIDwIaMvWKRhhFJyrnYpVSbBm0KALUGZnzjYTbvWTY/BW/m4pfRuW0CIneyxm4qRaJsfvP8DX33kM5RcM2mNwPstyncoccQuUrYv5aADJkfVeRNfxODd9VrouIgWbMJbKCHelbzxpJSCoteD2JCcmUc3Tr/K2y8vomu/SAPpZg+VWCfCHtJh4OXVDsPiHEWr7gE9PiQA+LN1Nhkco8+1E6lnLcQWkUorAAqFL9feWQIh0YTCYoH61neLU49dATH+P/jZ4O9QADCHRRuE0PLZMtp3C2fWtNNajRXl+21oxhgHFY77E5pPy0T/Agsaa1mvuur0p6MSeO0+inAGERKaqkwTxYoT/FO74NrVwPoImvuswlEsPJCmUzWplUZbKZj2irIfNpmxJg5hENDWGdJPbUclvUcXgHeuAY/7XwXBz6MCSKjT3whW6whVcipWuOnIgSSYS+urMSOClwV95l+KoBR3mE3XtYgoNhQYUYbVtkPeI10hQL8K4b8DK8p+R4c/ZIQim/1XMfPn1ZeepsPrm6YJJdKfn1UCu1UJt06bbG8YLmTUc2KuWZyY4zDWYF+QRr754GnNwE+8FK1uXgY1L36MVtJRxBNPAmGDjEmzGGstay53JMLkQKnmfL1e3uRZ+PVKA8/VtfQ7uy/10UrhZT1i+o4G8zgY="
+    - CPPFLAGS: "-I/tmp/iniparser"
+    - LDFLAGS: "-L/tmp/iniparser"
+
+before_install:
+      - echo -n | openssl s_client -connect scan.coverity.com:443 | sed -ne '/-BEGIN CERTIFICATE-/,/-END CERTIFICATE-/p' | sudo tee -a /etc/ssl/certs/ca-
+      - ./.travis-prepare /tmp/iniparser
+
+addons:
+  apt:
+    packages:
+      gengetopt
+
+  coverity_scan:
+    project:
+      name: "ensc/cfailban"
+      description: "Build submitted via Travis CI"
+    notification_email: github@ensc.de
+    build_command_prepend: ":"
+    build_command:   "make -j"
+    branch_pattern: master
+
+script:
+- make -j
