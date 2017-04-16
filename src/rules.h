@@ -85,8 +85,8 @@ struct ip_whitelist {
 	}			ip;
 
 	union {
-		unsigned char	buf[1];
-		uint8_t		u8;
+		unsigned char	buf[16];
+		uint8_t		u8[16];
 		struct in_addr	ip4;
 		struct in6_addr	ip6;
 	}			mask;

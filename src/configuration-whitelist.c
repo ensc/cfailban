@@ -20,6 +20,7 @@
 
 #include "configuration.h"
 
+#include <assert.h>
 #include <string.h>
 
 #include <iniparser.h>
@@ -96,8 +97,15 @@ static bool parse_ip_whitelist(struct ip_whitelist *ip, char const *s)
 		lerr("invalid ip mask '%s'", mask);
 		return false;
 	} else {
+		static_assert(sizeof ip->mask == sizeof ip->mask.u8,
+			      "unexpected layout of 'ip->mask'");
+		static_assert(sizeof ip->mask == sizeof ip->mask.buf,
+			      "unexpected layout of 'ip->mask'");
+		static_assert(sizeof ip->mask == sizeof ip->mask.ip6,
+			      "unexpected layout of 'ip->mask'");
+
 		memset(ip->mask.buf, 0, ip->len / 8);
-		create_mask(&ip->mask.u8, plen);
+		create_mask(ip->mask.u8, plen);
 	}
 
 	return true;
