@@ -110,6 +110,11 @@ void _log_msg(unsigned int lvl, unsigned int domain,
 		/* noop; this branch is to avoid -Wunused-result warnings */
 	}
 
+	if (!fmt)
+		/* when called with NULL fmt; skip output and honor L_POP and
+		 * L_PUSH only */
+		goto finish;
+
 	if (!(lvl & L_NOTM)) {
 		char	fn_buf[128];
 
@@ -148,6 +153,8 @@ void _log_msg(unsigned int lvl, unsigned int domain,
 
 	if (!(lvl & L_NONL))
 		dprintf(_log_fd, "\n");
+
+finish:
 
 	if (lockf(_log_fd, F_ULOCK, 0) < 0) {
 		/* noop; this branch is to avoid -Wunused-result warnings */

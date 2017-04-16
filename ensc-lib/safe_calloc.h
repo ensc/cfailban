@@ -19,9 +19,25 @@
 
 #include <stdlib.h>
 #include <stdint.h>
+#include <limits.h>
 #include <errno.h>
 
 #include "compiler.h"
+#include "type-utils.h"
+
+inline static int _safe_calloc_check_mul(size_t a, size_t b, size_t *res)
+{
+	size_t	tmp;
+
+	return !_mul_overflow(a, b, res ? res : &tmp);
+}
+
+inline static int _safe_calloc_check_add(size_t a, size_t b, size_t *res)
+{
+	size_t	tmp;
+
+	return !_add_overflow(a, b, res ? res : &tmp);
+}
 
 inline static void *safe_calloc(size_t num, size_t sz)
 {
@@ -33,7 +49,7 @@ inline static void *safe_calloc(size_t num, size_t sz)
 	have_safe_calloc = 0;
 #endif
 
-	if (!have_safe_calloc && sz != 0 && SIZE_MAX / sz < num) {
+	if (!have_safe_calloc && !_safe_calloc_check_mul(num, sz, NULL)) {
 		errno = ENOMEM;
 		return NULL;
 	}
@@ -43,12 +59,14 @@ inline static void *safe_calloc(size_t num, size_t sz)
 
 inline static void *recalloc(void *old, size_t num, size_t sz)
 {
-	if (sz != 0 && SIZE_MAX / sz < num) {
+	size_t	tot_sz;
+
+	if (!_safe_calloc_check_mul(num, sz, &tot_sz)) {
 		errno = ENOMEM;
 		return NULL;
 	}
 
-	return realloc(old, num*sz);
+	return realloc(old, tot_sz);
 }
 
 inline static int _sizeof_flexarr(
@@ -59,20 +77,15 @@ inline static int _sizeof_flexarr(
 	BUG_ON(sz0 == 0);
 	BUG_ON(sz1 == 0);
 
-	if (SIZE_MAX / sz1 < cnt)
+	if (!_safe_calloc_check_mul(sz1, cnt, &sz_flex) ||
+	    !_safe_calloc_check_add(sz0, sz_flex, res))
 		return 0;
 
-	sz_flex = cnt * sz1;
-
-	if (SIZE_MAX - sz0 < sz_flex)
-		return 0;
-
-	*res = sz0 + sz_flex;
 	return 1;
 }
 
 #define sizeof_flexarr(_res, _s, _n, _attr)			\
-	_sizeof_flexarr(_res, sizeof(_s), _n, sizeof(_s)._attr)
+	_sizeof_flexarr(_res, sizeof(_s), _n, sizeof(_s)._attr[0])
 
 inline static void *_malloc_flexarr(size_t sz0, size_t cnt, size_t sz1)
 {

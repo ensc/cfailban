@@ -54,6 +54,7 @@ libexecdir = $(prefix)/libexec
 datadir = $(prefix)/share
 localedir = $(datadir)/locale
 sysconfdir = ${prefix}/etc
+includedir = ${prefix}/include
 
 localstatedir = $(prefix)/var
 
@@ -61,6 +62,7 @@ pkglibdir = $(libdir)/$(PACKAGE)
 pkgdatadir = $(datadir)/$(PACKAGE)
 pkglibexecdir = $(libexecdir)/$(PACKAGE)
 pkgstatedir = $(localstatedir)/$(PACKAGE)
+pkgincludedir = ${includedir}/${PACKAGE}
 
 _target_types = PROGRAMS MODULES SCRIPTS DATA
 

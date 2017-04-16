@@ -135,6 +135,11 @@
 #define stringify(_m)	#_m
 #define stringify2(_m)	stringify(_m)
 
+#if !defined(__STDC_VERSION__) || __STDC_VERSION__ < 201112L
+#  define _Static_assert(_cond, _msg) \
+	BUILD_BUG_ON(!(_cond))
+#endif
+
 #ifdef _lint
 # include "compiler-lint.h"
 #elif defined(__GNUC__) || defined(__clang__)
@@ -143,5 +148,16 @@
 # error "Unsupporter compiler"
 #endif
 
+#ifndef HAVE_BUILTIN_MUL_OVERFLOW
+#  define HAVE_BUILTIN_MUL_OVERFLOW	0
+#endif
+
+#ifndef HAVE_BUILTIN_SUB_OVERFLOW
+#  define HAVE_BUILTIN_SUB_OVERFLOW	0
+#endif
+
+#ifndef COMPILER_HAS_C11_GENERIC
+#  define COMPILER_HAS_C11_GENERIC	0
+#endif
 
 #endif	/* H_UTUN_USB_COMPILER_H */

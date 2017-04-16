@@ -19,9 +19,23 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
+#include <stdbool.h>
 #include <assert.h>
 
 #include "xalloc.h"
+
+struct strbuf_const {
+	char const	*b;
+	size_t		len;
+};
+
+inline static void strbuf_const_assign(struct strbuf_const *buf,
+				       void const *data, size_t len)
+{
+	buf->b = data;
+	buf->len = len;
+}
 
 struct strbuf {
 	size_t	len;
@@ -57,6 +71,9 @@ inline static void strbuf_assign_str(struct strbuf *buf, char *str)
 
 inline static void	_strbuf_shrink(struct strbuf *buf, size_t extra)
 {
+	if (unlikely(buf->len > SIZE_MAX - extra))
+		alloc_error(__func__, __FILE__, __LINE__, __func__);
+			    
 	if (buf->alloc > buf->len + extra) {
 		buf->alloc = buf->len + extra;
 		buf->b = Xrealloc(buf->b, buf->alloc);
@@ -70,8 +87,28 @@ inline static void	strbuf_shrink(struct strbuf *buf)
 
 inline static void	strbuf_allocate(struct strbuf *buf, size_t l)
 {
+	/* this is some sanity check to ensure that caller does not provide
+	 * too large values for 'l'; overflow might not happen when simple
+	 * 'buf->len + len' is within range, but we check it netherless.
+	 *
+	 * NOTE: although we check for overflows in 'l * 3/2 + 8', the '/ 2'
+	 * and '+ 8' operations can be ignored because only the '* 3' can
+	 * overflow for SIZE_MAX > 17 */
+	if (unlikely(l > SIZE_MAX / 3))
+		alloc_error(__func__, __FILE__, __LINE__, __func__);
+
+	/* this check is critical... */
+	if (unlikely(buf->len > SIZE_MAX - l))
+		alloc_error(__func__, __FILE__, __LINE__, __func__);
+			    
 	if (buf->len + l > buf->alloc) {
-		buf->alloc = buf->len + l * 3 / 2 + 8;
+		/* we checked above that this does not overflow */
+		size_t		extra = l * 3 / 2 + 8;
+
+		if (unlikely(buf->len > SIZE_MAX - extra))
+			alloc_error(__func__, __FILE__, __LINE__, __func__);
+
+		buf->alloc = buf->len + extra;
 		buf->b = Xrealloc(buf->b, buf->alloc);
 	}
 }

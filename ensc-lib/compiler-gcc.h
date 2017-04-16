@@ -92,4 +92,20 @@
 		(_type)(_tmp);			\
 	})
 
+#ifdef __clang
+#  define HAVE_BUILTIN_MUL_OVERFLOW	(__has_attribute(__builtin_mul_overflow))
+#  define HAVE_BUILTIN_SUB_OVERFLOW	(__has_attribute(__builtin_sub_overflow))
+#elif __GNUC__ >= 5
+#  define HAVE_BUILTIN_MUL_OVERFLOW	1
+#  define HAVE_BUILTIN_SUB_OVERFLOW	1
+#endif
+
+#ifndef __STDC_VERSION__
+#  warning "Unknown C version"
+#elif __STDC_VERSION__ >= 201112L
+#  if __GNUC__ >= 5
+#    define COMPILER_HAS_C11_GENERIC	1
+#  endif
+#endif
+
 #endif	/* H_UTUN_INCLUDE_COMPILER_GCC_H */

@@ -36,7 +36,7 @@ enum {
 	L_NONL	 = (1u << 28),
 	L_NOTM   = (1u << 29),
 	L_PUSH   = (1u << 30),
-	L_POP    = (1 << 31),
+	L_POP    = (int)(1u << 31),
 
 	L_START_FLAGS = 28,
 	L_MASK_FLAGS  = ~L_MASK_LEVELS,
