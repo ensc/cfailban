@@ -97,7 +97,11 @@ int main(int argc, char *argv[])
 		
 		bool		res;
 
-		poll(fds, ARRAY_SIZE(fds), -1);
+		if (poll(fds, ARRAY_SIZE(fds), -1) < 0){
+			perror("poll()");
+			goto out;
+		}
+
 		if (fds[0].revents & POLLIN) {
 			res = source->read(source);
 
