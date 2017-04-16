@@ -34,6 +34,10 @@
 
 #define DEBUG_CATEGORY	10
 
+#ifndef static_assert
+#  define static_assert(_a, _b) do {} while (0)
+#endif
+
 static void create_mask(uint8_t *buf, size_t cnt)
 {
 	while (cnt >= 8) {
