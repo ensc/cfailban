@@ -173,6 +173,7 @@ static int socket_inet(struct sockaddr_storage *addr, socklen_t *len,
 
 		memcpy(addr, rp->ai_addr, rp->ai_addrlen);
 		*len = rp->ai_addrlen;
+		break;
 	}
 
 	freeaddrinfo(res);
